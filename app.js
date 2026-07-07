@@ -1218,7 +1218,8 @@ const App = (() => {
   }
 
   // ---------- 启动 ----------
-  function start() {
+  async function start() {
+    await TSD.init();
     const path = location.hash.replace('#', '') || 'today';
     render(path);
   }

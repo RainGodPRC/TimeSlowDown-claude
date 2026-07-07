@@ -149,19 +149,57 @@ const TSD = (() => {
     return Math.floor(d.getTime() / 1000);
   }
 
-  // ---------- 持久化 ----------
-  let state = load();
+  // ---------- 持久化（IndexedDB；商业级：突破 LocalStorage 5MB 上限 + 抗缓存清理）----------
+  // 内存态 state 同步读写不变，IDB 作后端：启动 async 载入，save 异步写回
+  const DB_NAME = 'tsd-cc';
+  const STORE = 'kv';
+  let _dbP = null;
+  function idbOpen() {
+    if (_dbP) return _dbP;
+    _dbP = new Promise((resolve, reject) => {
+      const req = indexedDB.open(DB_NAME, 1);
+      req.onupgradeneeded = () => { const d = req.result; if (!d.objectStoreNames.contains(STORE)) d.createObjectStore(STORE); };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => { _dbP = null; reject(req.error); };
+    });
+    return _dbP;
+  }
+  function idbGet(key) {
+    return idbOpen().then(db => new Promise((resolve, reject) => {
+      const r = db.transaction(STORE, 'readonly').objectStore(STORE).get(key);
+      r.onsuccess = () => resolve(r.result);
+      r.onerror = () => reject(r.error);
+    }));
+  }
+  function idbSet(key, val) {
+    return idbOpen().then(db => new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, 'readwrite');
+      tx.objectStore(STORE).put(val, key);
+      tx.oncomplete = () => resolve(true);
+      tx.onerror = () => reject(tx.error);
+    }));
+  }
 
-  function load() {
-    try {
-      const raw = localStorage.getItem(KEY);
-      if (!raw) return freshState();
-      const parsed = JSON.parse(raw);
-      if (parsed.version !== VERSION) return freshState();
-      return parsed;
-    } catch (e) {
-      return freshState();
-    }
+  let state = null;
+  let _ready = null;
+  // 启动时调用（app.js start 会 await）；从 IDB 载入，自动迁移旧 LocalStorage 数据
+  function init() {
+    if (_ready) return _ready;
+    _ready = (async () => {
+      let parsed = null;
+      try {
+        parsed = await idbGet(KEY);
+        if (!parsed) {
+          const ls = localStorage.getItem(KEY); // 迁移旧版数据
+          if (ls) { parsed = JSON.parse(ls); await idbSet(KEY, parsed); }
+        }
+      } catch (e) {
+        try { parsed = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (_) {}
+      }
+      state = (parsed && parsed.version === VERSION) ? parsed : freshState();
+      return state;
+    })();
+    return _ready;
   }
   function freshState() {
     return {
@@ -186,7 +224,8 @@ const TSD = (() => {
     };
   }
   function save() {
-    try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {}
+    if (!state) return;
+    try { idbSet(KEY, state).catch(() => {}); } catch (e) {}
   }
 
   // ---------- moments ----------
@@ -464,6 +503,7 @@ const TSD = (() => {
 
   return {
     reset: () => { state = freshState(); save(); },
+    init,
     raw: () => state,
     getMoments, getMoment, addMoment, updateMoment,
     getRevisits, getRevisitCount, addRevisit, thickness,
