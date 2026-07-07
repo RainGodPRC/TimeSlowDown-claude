@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=5.0">
+  <meta name="theme-color" content="#0f1014" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#f7f4ef" media="(prefers-color-scheme: light)">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="TimeSlowDown">
+  <meta name="description" content="让走过的时间，长成你的人生。TSD 每天把你带回一个过去的瞬间，让记忆在反复回访里变厚。">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="icon" type="image/png" href="icon-192.png">
+  <title>TimeSlowDown · 回访</title>
+  <link rel="stylesheet" href="styles.css?v=5">
+</head>
+<body>
+  <div id="app" role="main"></div>
+  <script src="data.js?v=5"></script>
+  <script src="app.js?v=5"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    }
+  </script>
+</body>
+</html>

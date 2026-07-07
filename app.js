@@ -1,0 +1,1085 @@
+/* ============================================================
+   TSD Claude Code 分支 · 应用主体
+   论点：回访（retrieval practice）
+   主交付：今日回访（被带回过去），非今日切片（生产新内容）
+   ============================================================ */
+
+const App = (() => {
+  const $ = (s, el = document) => el.querySelector(s);
+  const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+
+  // ---------- 路由 ----------
+  const routes = {};
+  let currentView = null;
+
+  function route(path, handler) { routes[path] = handler; }
+
+  function navigate(path, opts = {}) {
+    if (opts.replace) history.replaceState({ path }, '', '#' + path);
+    else history.pushState({ path }, '', '#' + path);
+    render(path);
+  }
+  window.addEventListener('popstate', e => {
+    const path = (e.state && e.state.path) || location.hash.replace('#', '') || 'today';
+    render(path);
+  });
+
+  function render(path) {
+    const [name, ...rest] = path.split('/');
+    const params = rest;
+    const handler = routes[name] || routes.today;
+    const app = $('#app');
+    app.innerHTML = '';
+    currentView = name;
+
+    // topbar
+    const top = el('div', { class: 'topbar' }, [
+      el('div', { class: 'topbar__title' }, [document.createTextNode('TimeSlowDown')]),
+      el('div', { class: 'topbar__right' }, [
+        el('button', { class: 'btn btn--sm btn--ghost', onclick: () => navigate('settings') }, ['⚙︎']),
+      ]),
+    ]);
+    app.appendChild(top);
+
+    // view 容器
+    const view = el('div', { class: 'view' + (opts_fullView(name) ? ' view--full' : '') });
+    app.appendChild(view);
+
+    const ctx = { view, params, navigate, el, $, $$, toast, sheet };
+    handler(ctx);
+
+    // tabbar（全屏视图如重温不显示）
+    if (!opts_noTabbar(name)) {
+      app.appendChild(renderTabbar(name));
+    }
+    window.scrollTo(0, 0);
+  }
+  function opts_fullView(name) { return ['revisit', 'onboarding'].includes(name); }
+  function opts_noTabbar(name) { return ['revisit', 'onboarding'].includes(name); }
+
+  function renderTabbar(active) {
+    const tabs = [
+      { id: 'today', icon: '⚬', label: '回声' },
+      { id: 'wilderness', icon: '◧', label: '旷野' },
+      { id: 'media', icon: '◈', label: '影像' },
+      { id: 'ai', icon: '✦', label: 'AI' },
+      { id: 'settings', icon: '⚙', label: '设置' },
+    ];
+    return el('nav', { class: 'tabbar' }, tabs.map(t =>
+      el('button', {
+        class: 'tabbar__btn' + (active === t.id ? ' is-active' : ''),
+        onclick: () => navigate(t.id),
+      }, [
+        el('span', { class: 'tabbar__icon' }, [t.icon]),
+        el('span', { class: 'tabbar__label' }, [t.label]),
+      ])
+    ));
+  }
+
+  // ---------- helpers ----------
+  function el(tag, attrs = {}, children = []) {
+    const e = document.createElement(tag);
+    for (const k in attrs) {
+      if (k === 'class') e.className = attrs[k];
+      else if (k === 'onclick') e.addEventListener('click', attrs[k]);
+      else if (k === 'oninput') e.addEventListener('input', attrs[k]);
+      else if (k === 'html') e.innerHTML = attrs[k];
+      else if (k.startsWith('data-')) e.setAttribute(k, attrs[k]);
+      else if (k === 'style') e.setAttribute('style', attrs[k]);
+      else e[k] = attrs[k];
+    }
+    // 健壮化：children 可为 string / Node / array / null
+    const kids = Array.isArray(children) ? children
+      : (children == null ? []
+        : (typeof children === 'string' || children.nodeType ? [children] : [String(children)]));
+    kids.forEach(c => {
+      if (c == null) return;
+      e.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
+    });
+    return e;
+  }
+
+  let toastTimer;
+  function toast(msg) {
+    let t = $('.toast');
+    if (!t) { t = el('div', { class: 'toast' }); document.body.appendChild(t); }
+    t.textContent = msg;
+    t.classList.add('is-show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.remove('is-show'), 2200);
+  }
+
+  // 底部 sheet
+  function sheet(contentNode, opts = {}) {
+    const backdrop = el('div', { class: 'sheet-backdrop' });
+    const s = el('div', { class: 'sheet' }, [
+      el('div', { class: 'sheet__handle' }),
+      contentNode,
+    ]);
+    document.body.appendChild(backdrop);
+    document.body.appendChild(s);
+    requestAnimationFrame(() => { backdrop.classList.add('is-open'); s.classList.add('is-open'); });
+    const close = () => {
+      backdrop.classList.remove('is-open'); s.classList.remove('is-open');
+      setTimeout(() => { backdrop.remove(); s.remove(); }, 300);
+    };
+    backdrop.addEventListener('click', close);
+    s._close = close;
+    return s;
+  }
+
+  function fmtWhen(when) {
+    if (!when) return '某天';
+    return when.text || '某天';
+  }
+  function fmtRelative(ts) {
+    if (!ts) return '';
+    const diff = Date.now() - ts;
+    const d = Math.floor(diff / 86400000);
+    if (d === 0) return '今天';
+    if (d === 1) return '昨天';
+    if (d < 7) return d + '天前';
+    if (d < 30) return Math.floor(d / 7) + '周前';
+    if (d < 365) return Math.floor(d / 30) + '个月前';
+    return Math.floor(d / 365) + '年前';
+  }
+  function fmtDate(ts) {
+    if (!ts) return '';
+    return new Date(ts).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
+  }
+
+  // ============================================================
+  // 视图：onboarding
+  // ============================================================
+  route('onboarding', ({ view, navigate }) => {
+    let step = 0;
+    const steps = [
+      // 0: 承诺
+      () => el('div', { class: 'text-center', style: 'padding-top:20vh;' }, [
+        el('div', { style: 'font-size:56px;margin-bottom:24px;' }, ['⊜']),
+        el('h1', { class: 'h1 serif', style: 'margin-bottom:16px;' }, ['让走过的时间，']),
+        el('h1', { class: 'h1 serif', style: 'margin-bottom:32px;' }, ['长成你的人生。']),
+        el('p', { class: 'lead muted', style: 'margin-bottom:48px;' }, [
+          'TSD 不要求你每天记新东西。',
+          el('br'),
+          '它每天把你带回一个过去的瞬间，',
+          el('br'),
+          '让记忆在反复回访里变厚。'
+        ]),
+        el('button', { class: 'btn btn--primary btn--lg btn--block', onclick: next }, ['开始第一次回访']),
+      ]),
+      // 1: 第一次回声体验（用种子）
+      () => {
+        const m = TSD.SEED_MOMENTS[2]; // 爸爸吃面
+        return el('div', { class: 'text-center' }, [
+          el('div', { class: 'section-title', style: 'margin-top:8vh;' }, ['今天的回声']),
+          echoCard(m, { navigate, ctaText: '停留一下', ctaAction: next }),
+          el('p', { class: 'muted', style: 'font-size:13px;margin-top:24px;' }, [
+            '这是 TSD 从你的过去里带回的一个瞬间。',
+            el('br'),
+            '回访不需要你写新东西，只需被带回。',
+          ]),
+        ]);
+      },
+      // 2: 才问生日
+      () => el('div', { class: 'text-center', style: 'padding-top:12vh;' }, [
+        el('div', { style: 'font-size:40px;margin-bottom:20px;' }, ['▦']),
+        el('h2', { class: 'h2', style: 'margin-bottom:12px;' }, ['你大概哪一年出生？']),
+        el('p', { class: 'muted mb-6' }, ['用来画出你的人生周格。可以跳过。']),
+        el('input', {
+          type: 'number', placeholder: '比如 1990',
+          style: 'text-align:center;font-size:24px;padding:16px;width:100%;background:var(--bg-elev);border:1px solid var(--line-strong);border-radius:14px;margin-bottom:24px;',
+          id: 'birth-input',
+        }),
+        el('div', { class: 'flex gap-3' }, [
+          el('button', { class: 'btn btn--ghost btn--lg', style: 'flex:1', onclick: () => { next(); } }, ['跳过']),
+          el('button', { class: 'btn btn--primary btn--lg', style: 'flex:1', onclick: () => {
+            const v = $('#birth-input').value;
+            if (v) TSD.setBirthYear(parseInt(v));
+            next();
+          } }, ['下一步']),
+        ]),
+      ]),
+      // 3: 周回顾情境
+      () => el('div', { style: 'padding-top:12vh;' }, [
+        el('h2', { class: 'h2 mb-3' }, ['你希望什么时候回顾？']),
+        el('p', { class: 'muted mb-6' }, ['TSD 会在你选的时间，把这一周回访过的瞬间整理给你。']),
+        ...[['evening', '每晚睡前', '用 1 分钟重看今天被带回的瞬间'],
+            ['weekend', '周末', '用 5 分钟看这周反复回了哪几个'],
+            ['morning', '每天清晨', '用 1 分钟从昨天的回声开始新一天']].map(([id, t, sub]) =>
+          el('button', {
+            class: 'card mb-3', style: 'width:100%;text-align:left;display:block;',
+            onclick: () => { TSD.setReviewContext(id); next(); }
+          }, [
+            el('div', { class: 'h3' }, [t]),
+            el('div', { class: 'muted', style: 'font-size:13px;margin-top:4px;' }, [sub]),
+          ])
+        ),
+      ]),
+      // 4: 通知权限（最后才问）
+      () => el('div', { class: 'text-center', style: 'padding-top:14vh;' }, [
+        el('div', { style: 'font-size:40px;margin-bottom:20px;' }, ['🔔']),
+        el('h2', { class: 'h2 mb-3' }, ['打开"今天的回声"提醒？']),
+        el('p', { class: 'muted mb-6' }, ['每天一次，TSD 把你带回一个旧瞬间。默认隐藏人物和原文。']),
+        el('div', { class: 'flex gap-3' }, [
+          el('button', { class: 'btn btn--ghost btn--lg', style: 'flex:1', onclick: () => { TSD.setNotifications(false); finish(); } }, ['暂不']),
+          el('button', { class: 'btn btn--primary btn--lg', style: 'flex:1', onclick: () => { TSD.setNotifications(true); finish(); } }, ['打开']),
+        ]),
+      ]),
+    ];
+    function next() { step++; if (step < steps.length) draw(); else finish(); }
+    function finish() {
+      TSD.setOnboarded(true);
+      navigate('today', { replace: true });
+    }
+    function draw() {
+      view.innerHTML = '';
+      view.appendChild(steps[step]());
+    }
+    draw();
+  });
+
+  // ============================================================
+  // 视图：today 今天的回声（主交付）
+  // ============================================================
+  route('today', ({ view, navigate }) => {
+    if (!TSD.raw().onboarded) { navigate('onboarding', { replace: true }); return; }
+
+    // 唤醒：一周窗口 + 当前周位置
+    const stats = TSD.weekRevisitStats();
+    const nd = TSD.ninetyDayStats();
+    const echo = TSD.pickEcho();
+
+    view.appendChild(
+      el('div', {}, [
+        // 时间唤醒
+        el('div', { class: 'flex items-center justify-between mb-4' }, [
+          el('div', {}, [
+            el('div', { class: 'section-title', style: 'margin:0;' }, [nowLabel()]),
+            el('div', { class: 'muted', style: 'font-size:12px;margin-top:2px;' }, [
+              '本周已回访 ', el('strong', { class: 'nums' }, [String(stats.distinct)]), ' 个瞬间',
+              ' · ', el('span', { class: 'nums' }, [String(stats.total)]), ' 次',
+            ]),
+          ]),
+          el('button', { class: 'chip chip--accent', onclick: () => navigate('wilderness') }, ['人生周格 ▸']),
+        ]),
+
+        // 今天的回声 —— 主交付
+        echo ? echoCard(echo, {
+          navigate,
+          ctaText: '带回这一刻',
+          ctaAction: () => navigate('revisit/' + echo.id),
+        }) : el('div', { class: 'empty' }, [
+          el('div', { class: 'empty__icon' }, ['⊘']),
+          el('div', { class: 'empty__title' }, ['还没有可回访的瞬间']),
+          el('div', { class: 'empty__sub' }, ['先留下一个瞬间，TSD 之后会把它带回给你。']),
+          el('button', { class: 'btn btn--primary mt-4', onclick: () => navigate('capture') }, ['留下第一个瞬间']),
+        ]),
+
+        // 三个月对照假设 —— 本分支北极星的可视化
+        el('div', { class: 'section-title' }, ['三个月回访固化']),
+        el('div', { class: 'card' }, [
+          el('div', { class: 'flex items-center justify-between mb-3' }, [
+            el('div', {}, [
+              el('div', { class: 'h3' }, ['回访 vs 可讲述']),
+              el('div', { class: 'muted', style: 'font-size:12px;' }, ['对照假设（M2 真实验证）']),
+            ]),
+            ringPct(nd.thickCount / Math.max(nd.revisitedCount + nd.notRevisitedCount, 1), nd.thickCount),
+          ]),
+          el('div', { class: 'divider', style: 'margin:12px 0;' }),
+          el('div', { class: 'flex gap-4' }, [
+            statBlock(String(nd.revisitedCount), '被回访过', 'accent'),
+            statBlock(String(nd.thickCount), '变厚(≥2次)', 'growth'),
+            statBlock(String(nd.notRevisitedCount), '未回访', 'mute'),
+          ]),
+          el('p', { class: 'muted', style: 'font-size:11px;margin-top:12px;line-height:1.5;' }, [
+            '假设：被回访≥2次的瞬间，三个月后可讲述率显著高于未回访。这是本分支可证伪的北极星，不同于"能否讲出5个瞬间"的整体指标。',
+          ]),
+        ]),
+
+        // 本周回访过的瞬间
+        el('div', { class: 'section-title' }, ['本周回访图谱']),
+        weekGraph(navigate),
+
+        // 今日微小行动（原则6：导向行动）
+        el('div', { class: 'section-title' }, ['今天的一个小动作']),
+        el('div', { class: 'card card--glass' }, [
+          el('div', { class: 'muted', style: 'font-size:12px;margin-bottom:6px;' }, ['回访之后，可选地把过去变成今天的动力']),
+          el('div', { class: 'serif', style: 'font-size:16px;line-height:1.5;' }, [
+            echo ? todayActionHint(echo) : '今天没有建议。'
+          ]),
+        ]),
+      ])
+    );
+  });
+
+  function nowLabel() {
+    const h = new Date().getHours();
+    const d = new Date().getDay();
+    const wd = d === 0 || d === 6 ? '周末' : '工作日';
+    if (h < 6) return '深夜 · ' + wd;
+    if (h < 12) return '清晨 · ' + wd;
+    if (h < 18) return '午后 · ' + wd;
+    return '夜晚 · ' + wd;
+  }
+
+  function todayActionHint(echo) {
+    if (echo.people && echo.people.length) {
+      return '要不要给' + echo.people[0] + '发一条消息？哪怕只是问一句"最近怎么样"。';
+    }
+    if (echo.tags && echo.tags.includes('身体')) return '今天能不能再走 15 分钟？';
+    if (echo.tags && echo.tags.includes('日常')) return '今天留意一下，有没有一个和那天不一样的细节。';
+    return '今天做一件事的时候，多停 10 秒看看它。';
+  }
+
+  // 回声卡 —— 被带回的过去
+  function echoCard(m, opts = {}) {
+    const revCount = TSD.getRevisitCount(m.id);
+    return el('div', { class: 'echo-card' }, [
+      el('div', { class: 'echo-card__label' }, ['今天的回声']),
+      el('div', { class: 'echo-card__quote serif' }, ['"' + m.quote + '"']),
+      el('div', { class: 'echo-card__when' }, [
+        fmtWhen(m.when),
+        revCount > 0 ? ' · 已回访 ' + revCount + ' 次' : ' · 第一次被带回',
+      ]),
+      opts.media !== false && m.media ? el('img', { src: m.media, style: 'max-width:60%;border-radius:14px;margin:0 auto 20px;position:relative;' }) : null,
+      el('div', { class: 'echo-card__actions' }, [
+        el('button', { class: 'btn btn--primary btn--lg btn--block', onclick: opts.ctaAction }, [opts.ctaText || '带回这一刻']),
+        el('button', { class: 'btn btn--ghost btn--sm', onclick: () => opts.navigate('moment/' + m.id) }, ['看完整瞬间']),
+      ]),
+    ]);
+  }
+
+  function statBlock(num, label, color) {
+    const colorVar = { accent: 'var(--accent)', growth: 'var(--growth)', mute: 'var(--fg-mute)' }[color] || 'var(--fg)';
+    return el('div', { style: 'flex:1;text-align:center;' }, [
+      el('div', { class: 'nums', style: 'font-size:24px;font-weight:700;color:' + colorVar + ';' }, [num]),
+      el('div', { class: 'muted', style: 'font-size:11px;margin-top:2px;' }, [label]),
+    ]);
+  }
+
+  function ringPct(pct, label) {
+    const r = 26, c = 2 * Math.PI * r;
+    const off = c * (1 - Math.min(pct, 1));
+    return el('div', { class: 'ring' }, [
+      el('svg', { class: 'ring__svg', width: 64, height: 64, viewBox: '0 0 64 64' }, [
+        el('circle', { class: 'ring__track', cx: 32, cy: 32, r: r, fill: 'none', 'stroke-width': 4 }),
+        el('circle', { class: 'ring__fill', cx: 32, cy: 32, r: r, fill: 'none', 'stroke-width': 4,
+          'stroke-dasharray': c, 'stroke-dashoffset': off }),
+      ]),
+      el('div', { class: 'ring__label nums' }, [String(label)]),
+    ]);
+  }
+
+  function weekGraph(navigate) {
+    const wr = TSD.weekRevisits();
+    if (!wr.length) {
+      return el('div', { class: 'card muted text-center', style: 'font-size:13px;' }, ['本周还没有回访。今天带回第一个瞬间吧。']);
+    }
+    const byMoment = {};
+    wr.forEach(r => { (byMoment[r.momentId] = byMoment[r.momentId] || []).push(r); });
+    const items = Object.entries(byMoment).sort((a, b) => b[1].length - a[1].length);
+    return el('div', { class: 'card' }, items.map(([mid, revs]) => {
+      const m = TSD.getMoment(mid);
+      if (!m) return null;
+      return el('div', { class: 'list-row', onclick: () => navigate('moment/' + mid) }, [
+        el('div', { class: 'list-row__icon', style: thicknessColor(m.id) }, [revs.length >= 2 ? '◈' : '○']),
+        el('div', { class: 'list-row__main' }, [
+          el('div', { class: 'list-row__title serif', style: 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;' }, ['"' + truncate(m.quote, 22) + '"']),
+          el('div', { class: 'list-row__sub' }, ['回访 ' + revs.length + ' 次 · 最近 ' + fmtRelative(revs[revs.length - 1].at)]),
+        ]),
+        el('div', { class: 'list-row__right' }, [revs.length >= 2 ? el('span', { class: 'thickness-badge' }, ['×' + revs.length]) : '×1']),
+      ]);
+    }));
+  }
+  function thicknessColor(mid) {
+    const t = TSD.thickness(mid);
+    return t === 'thick' ? 'background:var(--accent-glow);color:var(--accent);'
+      : t === 'bloom' ? 'background:rgba(212,135,158,0.14);color:var(--bloom);'
+      : '';
+  }
+  function truncate(s, n) { return s.length > n ? s.slice(0, n) + '…' : s; }
+
+  // ============================================================
+  // 视图：revisit/:id 回访重温（限时、原声、可追加层叠）
+  // ============================================================
+  route('revisit', ({ view, navigate, params }) => {
+    const id = params[0];
+    const m = TSD.getMoment(id);
+    if (!m) { navigate('today', { replace: true }); return; }
+
+    const revs = TSD.getRevisits(id);
+    let secondsLeft = 10;
+    let timerInt = null;
+    let finished = false;
+
+    view.appendChild(el('div', {}, [
+      el('div', { class: 'section-title' }, ['回访中 · 限时 10 秒']),
+      el('p', { class: 'muted', style: 'font-size:12px;margin-bottom:16px;' }, [
+        '不沉溺。被带回 10 秒，就回到今天。',
+      ]),
+
+      // 瞬间本体（原话 + 媒体）
+      el('div', { class: 'moment-card moment-card--thick' }, [
+        m.media ? el('div', { class: 'moment-card__media' }, [el('img', { src: m.media })]) : null,
+        el('div', { class: 'moment-card__body' }, [
+          el('div', { class: 'moment-card__quote serif' }, ['"' + m.quote + '"']),
+          el('div', { class: 'moment-card__meta' }, [
+            el('span', {}, [fmtWhen(m.when)]),
+            el('span', {}, [m.people && m.people.length ? m.people.join('、') : '独自']),
+          ]),
+          // 已有层叠
+          revs.length ? el('div', { class: 'moment-card__layers' }, revs.map(r =>
+            el('div', { class: 'moment-card__layer' }, [
+              el('div', { class: 'moment-card__layer-time' }, [fmtDate(r.at) + ' · 回访']),
+              el('div', {}, [r.feeling || '（只停留了一会儿，没说话）']),
+            ])
+          )) : null,
+        ]),
+      ]),
+
+      // 计时环
+      el('div', { class: 'text-center mt-5', id: 'timer-wrap' }, [
+        ringPct(0, '10'),
+        el('div', { class: 'muted', style: 'font-size:12px;margin-top:8px;' }, ['秒后可以补一句"现在再看"']),
+      ]),
+
+      // 追加感受（10秒后激活）
+      el('div', { class: 'mt-5', id: 'feeling-wrap' }, [
+        el('textarea', {
+          id: 'feeling-input',
+          placeholder: '现在再看，我想说…（可选，保留你的原话）',
+          style: 'width:100%;min-height:80px;padding:14px;background:var(--bg-elev);border:1px solid var(--line-strong);border-radius:14px;font-size:15px;resize:none;',
+          disabled: true,
+        }),
+        el('div', { class: 'flex gap-3 mt-3' }, [
+          el('button', { class: 'btn btn--ghost btn--lg', style: 'flex:1', onclick: () => navigate('today') }, ['就到这里']),
+          el('button', { class: 'btn btn--primary btn--lg', style: 'flex:1', id: 'save-feeling', disabled: true }, ['留下这一层']),
+        ]),
+      ]),
+    ]));
+
+    // 计时
+    const ringFill = $('.ring__fill', view);
+    const ringLabel = $('.ring__label', view);
+    const c = 2 * Math.PI * 26;
+    timerInt = setInterval(() => {
+      secondsLeft--;
+      const elapsed = 10 - secondsLeft;
+      if (ringFill) {
+        ringFill.setAttribute('stroke-dashoffset', String(c * (1 - elapsed / 10)));
+        ringLabel.textContent = String(Math.max(secondsLeft, 0));
+      }
+      if (secondsLeft <= 0 && !finished) {
+        finished = true;
+        clearInterval(timerInt);
+        $('#feeling-input', view).disabled = false;
+        $('#save-feeling', view).disabled = false;
+        ringLabel.textContent = '✓';
+        toast('可以补一句了，也可以不补');
+      }
+    }, 1000);
+
+    $('#save-feeling', view).addEventListener('click', () => {
+      const v = $('#feeling-input', view).value.trim();
+      TSD.addRevisit(id, v);
+      // 记录 AI 任务日志（T1 忠实整理：只排列不改写）
+      TSD.logAiTask({
+        type: 'T1',
+        payload: { momentId: id, action: 'append_layer', feeling: v || '(空)' },
+        result: '保留用户原话，未改写过去记录',
+        localOnly: true,
+      });
+      toast('这一层已留住');
+      clearInterval(timerInt);
+      navigate('today');
+    });
+  });
+
+  // ============================================================
+  // 视图：moment/:id 瞬间详情
+  // ============================================================
+  route('moment', ({ view, navigate, params }) => {
+    const id = params[0];
+    const m = TSD.getMoment(id);
+    if (!m) { navigate('today', { replace: true }); return; }
+    const revs = TSD.getRevisits(id);
+
+    view.appendChild(el('div', {}, [
+      el('div', { class: 'flex items-center justify-between mb-4' }, [
+        el('button', { class: 'btn btn--sm btn--ghost', onclick: () => history.back() }, ['‹ 返回']),
+        el('span', { class: 'chip ' + kindChipClass(m.kind) }, [kindLabel(m.kind)]),
+      ]),
+      el('div', { class: 'moment-card moment-card--thick' }, [
+        m.media ? el('div', { class: 'moment-card__media' }, [el('img', { src: m.media })]) : null,
+        el('div', { class: 'moment-card__body' }, [
+          el('div', { class: 'moment-card__quote serif' }, ['"' + m.quote + '"']),
+          el('div', { class: 'moment-card__meta' }, [
+            el('span', {}, [fmtWhen(m.when)]),
+            el('span', {}, [m.place || '']),
+          ]),
+          el('div', { class: 'flex gap-2 mt-3' }, (m.tags || []).map(t => el('span', { class: 'chip' }, [t]))),
+          el('div', { class: 'divider' }),
+          el('div', { class: 'muted', style: 'font-size:12px;' }, [
+            '来源：' + (m.source === 'seed' ? '引导种子' : '用户记录') + ' · 创建于 ' + fmtRelative(m.createdAt),
+          ]),
+        ]),
+      ]),
+
+      el('div', { class: 'section-title' }, ['时间层叠（' + revs.length + ' 次回访）']),
+
+      revs.length ? el('div', { class: 'card' }, revs.map((r, i) =>
+        el('div', { class: i > 0 ? 'moment-card__layer mt-3' : 'moment-card__layer' }, [
+          el('div', { class: 'moment-card__layer-time' }, ['第 ' + (i + 1) + ' 次回访 · ' + fmtDate(r.at)]),
+          el('div', {}, [r.feeling || '（只停留了一会儿）']),
+        ])
+      )) : el('div', { class: 'card muted text-center', style: 'font-size:13px;' }, ['还没被回访过。']),
+
+      el('button', { class: 'btn btn--primary btn--lg btn--block mt-5', onclick: () => navigate('revisit/' + id) }, ['再回访一次']),
+      el('button', { class: 'btn btn--ghost btn--block mt-3', onclick: () => openShareSheet(m, revs, navigate) }, ['分享这一刻']),
+    ]));
+  });
+
+  function kindLabel(k) { return { bloom: '高光', grass: '日常', night: '平淡' }[k] || '瞬间'; }
+  function kindChipClass(k) { return { bloom: 'chip--bloom', grass: 'chip--growth', night: 'chip--night' }[k] || ''; }
+
+  // ============================================================
+  // 视图：wilderness 人生旷野
+  // ============================================================
+  route('wilderness', ({ view, navigate }) => {
+    const life = TSD.lifeWeeks();
+    const moments = TSD.getMoments();
+
+    view.appendChild(el('div', {}, [
+      el('h2', { class: 'h2 mb-2' }, ['人生旷野']),
+      el('p', { class: 'muted mb-5', style: 'font-size:13px;' }, [
+        '每格是一周。被回访的瞬间在旷野里变厚——',
+        el('span', { style: 'color:var(--accent);' }, ' ◈ '),
+        '变厚(≥2次) ·',
+        el('span', { style: 'color:var(--bloom);' }, ' ● '),
+        '花丛(1次) ·',
+        el('span', { style: 'color:var(--growth);' }, ' ▦ '),
+        '草地',
+      ]),
+
+      life ? (() => {
+        const total = life.total;
+        const lived = life.lived;
+        const grid = el('div', { class: 'wilderness' }, [
+          el('div', { class: 'wilderness-grid', id: 'wild-grid' }),
+          el('div', { class: 'flex justify-between mt-4' }, [
+            el('div', { class: 'muted', style: 'font-size:11px;' }, [
+              '已走过 ',
+              el('strong', { class: 'nums', style: 'color:var(--accent);' }, [String(lived)]),
+              ' 周 · 余生约 ',
+              el('span', { class: 'nums' }, [String(Math.max(total - lived, 0))]),
+              ' 周',
+            ]),
+            el('div', { class: 'muted', style: 'font-size:11px;' }, ['不显示精确剩余寿命']),
+          ]),
+        ]);
+        // 渲染格子（采样到 ~13x40=520 格）
+        setTimeout(() => {
+          const g = $('#wild-grid');
+          if (!g) return;
+          const cols = 13, rows = 40;
+          for (let i = 0; i < cols * rows; i++) {
+            const weekIdx = Math.floor(i / cols) + (i % cols) * rows; // 重排
+            const cell = el('div', { class: 'wilderness-cell' });
+            if (weekIdx > lived) cell.classList.add('wilderness-cell--future');
+            else if (weekIdx === lived) cell.classList.add('wilderness-cell--today');
+            else {
+              // 看这一周附近有没有瞬间，及回访厚度
+              const near = moments.find(m => {
+                if (!m.when || !m.when.start) return false;
+                const mweek = Math.floor(m.when.start / (86400 * 7));
+                return Math.abs(mweek - weekIdx) < 2;
+              });
+              if (near) {
+                const t = TSD.thickness(near.id);
+                if (t === 'thick') cell.classList.add('wilderness-cell--thick');
+                else if (t === 'bloom') cell.classList.add('wilderness-cell--bloom');
+                else cell.classList.add('wilderness-cell--grass');
+              } else {
+                // 随机草地
+                if (weekIdx < lived - 2 && Math.random() > 0.6) cell.classList.add('wilderness-cell--grass');
+              }
+            }
+            g.appendChild(cell);
+          }
+        }, 0);
+        return grid;
+      })() : el('div', { class: 'card text-center muted' }, [
+        '还没设置出生年份。',
+        el('button', { class: 'btn btn--sm btn--ghost mt-3', onclick: () => navigate('settings') }, ['去设置']),
+      ]),
+
+      el('div', { class: 'section-title' }, ['三个镜头']),
+      el('div', { class: 'card' }, [
+        el('div', { class: 'list-row', onclick: () => navigate('media') }, [
+          el('div', { class: 'list-row__icon' }, ['⏱']),
+          el('div', { class: 'list-row__main' }, [
+            el('div', { class: 'list-row__title' }, ['时间镜头']),
+            el('div', { class: 'list-row__sub' }, ['那段时间发生了什么']),
+          ]),
+          el('div', { class: 'list-row__right' }, ['▸']),
+        ]),
+        el('div', { class: 'list-row', onclick: () => navigate('media') }, [
+          el('div', { class: 'list-row__icon' }, ['☻']),
+          el('div', { class: 'list-row__main' }, [
+            el('div', { class: 'list-row__title' }, ['人物镜头']),
+            el('div', { class: 'list-row__sub' }, ['谁与我共同走过']),
+          ]),
+          el('div', { class: 'list-row__right' }, ['▸']),
+        ]),
+        el('div', { class: 'list-row', onclick: () => navigate('media') }, [
+          el('div', { class: 'list-row__icon' }, ['◎']),
+          el('div', { class: 'list-row__main' }, [
+            el('div', { class: 'list-row__title' }, ['主题镜头']),
+            el('div', { class: 'list-row__sub' }, ['家庭、创造、身体如何变化']),
+          ]),
+          el('div', { class: 'list-row__right' }, ['▸']),
+        ]),
+      ]),
+
+      el('div', { class: 'section-title' }, ['完整情绪语法']),
+      el('p', { class: 'muted', style: 'font-size:13px;line-height:1.6;' }, [
+        '晴天、雨天、雾与长夜共同构成完整人生。悲伤不是低质量，平静不是空白。同一时期可以同时存在多种天气。',
+      ]),
+    ]));
+  });
+
+  // ============================================================
+  // 视图：media 影像回访入口
+  // ============================================================
+  route('media', ({ view, navigate }) => {
+    const moments = TSD.getMoments().filter(m => m.media);
+    const all = TSD.getMoments();
+
+    view.appendChild(el('div', {}, [
+      el('h2', { class: 'h2 mb-2' }, ['影像 · 回访入口']),
+      el('p', { class: 'muted mb-5', style: 'font-size:13px;' }, [
+        '影像不是今天的记录附件，是',
+        el('strong', { style: 'color:var(--accent);' }, ['被带回的瞬间本体']),
+        '。旧照片/旧视频是回访的入口材料。',
+      ]),
+
+      // 媒体墙
+      moments.length ? el('div', { class: 'card' }, [
+        el('div', { class: 'section-title', style: 'margin-top:0;' }, ['媒体记忆墙（按回访排序）']),
+        el('div', { style: 'display:grid;grid-template-columns:repeat(3,1fr);gap:8px;' },
+          moments.map(m => {
+            const c = TSD.getRevisitCount(m.id);
+            return el('div', {
+              style: 'position:relative;aspect-ratio:1;border-radius:10px;overflow:hidden;cursor:pointer;' + (c >= 2 ? 'box-shadow:0 0 0 2px var(--accent);' : ''),
+              onclick: () => navigate('revisit/' + m.id),
+            }, [
+              el('img', { src: m.media, style: 'width:100%;height:100%;object-fit:cover;' }),
+              c > 0 ? el('div', { class: 'thickness-badge', style: 'position:absolute;top:4px;right:6px;background:rgba(0,0,0,0.6);padding:2px 6px;border-radius:8px;color:#fff;' }, ['×' + (c + 1)]) : null,
+            ]);
+          })
+        ),
+      ]) : el('div', { class: 'card text-center muted' }, [
+        el('div', { style: 'font-size:32px;margin-bottom:8px;' }, ['◈']),
+        '还没有带影像的瞬间。',
+        el('br'),
+        el('span', { style: 'font-size:12px;' }, ['生产版可从系统照片选择器导入旧照片作为回访入口。']),
+      ]),
+
+      el('div', { class: 'section-title' }, ['生产边界（媒体保险箱路径）']),
+      el('div', { class: 'card' }, [
+        el('div', { class: 'list-row' }, [el('div', { class: 'list-row__icon' }, ['🔒']), el('div', { class: 'list-row__main' }, [el('div', { class: 'list-row__title' }, ['E2EE 封存']), el('div', { class: 'list-row__sub' }, ['原始影像端到端加密，服务端不可读'])])]),
+        el('div', { class: 'list-row' }, [el('div', { class: 'list-row__icon' }, ['⊘']), el('div', { class: 'list-row__main' }, [el('div', { class: 'list-row__title' }, ['不扫全库']), el('div', { class: 'list-row__sub' }, ['只用系统单次选择器，不持久读取相册'])])]),
+        el('div', { class: 'list-row' }, [el('div', { class: 'list-row__icon' }, ['⤓']), el('div', { class: 'list-row__main' }, [el('div', { class: 'list-row__title' }, ['完整导出/删除']), el('div', { class: 'list-row__sub' }, ['包括缩略图、向量、云端副本'])])]),
+        el('div', { class: 'list-row' }, [el('div', { class: 'list-row__icon' }, ['♨']), el('div', { class: 'list-row__main' }, [el('div', { class: 'list-row__title' }, ['家庭/儿童影像复核']), el('div', { class: 'list-row__sub' }, ['敏感级别单独同意，默认不进云端'])])]),
+      ]),
+
+      el('div', { class: 'section-title' }, ['人物镜头（确定性抽取，非真实 AI）']),
+      el('div', { class: 'card' }, peopleLens(all, navigate)),
+    ]));
+
+    function peopleLens(moments, navigate) {
+      const map = {};
+      moments.forEach(m => (m.people || []).forEach(p => {
+        if (!p) return;
+        (map[p] = map[p] || []).push(m);
+      }));
+      const entries = Object.entries(map).sort((a, b) => b[1].length - a[1].length);
+      if (!entries.length) return [el('div', { class: 'muted text-center', style: 'font-size:13px;' }, ['还没有人物记录。'])];
+      return entries.map(([name, ms]) =>
+        el('div', { class: 'list-row' }, [
+          el('div', { class: 'list-row__icon' }, ['☻']),
+          el('div', { class: 'list-row__main' }, [
+            el('div', { class: 'list-row__title' }, [name]),
+            el('div', { class: 'list-row__sub' }, ['共同 ' + ms.length + ' 个瞬间 · 回访 ' + ms.reduce((s, m) => s + TSD.getRevisitCount(m.id), 0) + ' 次']),
+          ]),
+          el('div', { class: 'list-row__right' }, [String(ms.length)]),
+        ])
+      );
+    }
+  });
+
+  // ============================================================
+  // 视图：ai 忠实编辑器 + 任务契约 + 四道门
+  // ============================================================
+  route('ai', ({ view, navigate }) => {
+    const log = TSD.getAiLog();
+
+    view.appendChild(el('div', {}, [
+      el('h2', { class: 'h2 mb-2' }, ['AI 忠实编辑器']),
+      el('p', { class: 'muted mb-5', style: 'font-size:13px;' }, [
+        'AI 不是写日记助手，也不是意义判定者。它只做被 TSD 定义好的任务，每条结果可追溯、可编辑、可撤销。',
+      ]),
+
+      el('div', { class: 'section-title' }, ['五类任务契约']),
+      el('div', { class: 'card' }, [
+        taskRow('T0', '结构抽取', '从原话抽取人物/地点/时间/情绪，只抽取不润色', '与 Codex 同'),
+        taskRow('T1', '忠实整理', '把回访感受整理为时间层叠，不新增事实', '同 Codex T1，产物是层叠'),
+        taskRow('T2', '回访候选发现', '挑选今天值得被带回的旧瞬间', '本分支专属 · 与 Codex T2 不同', true),
+        taskRow('T3', '周期编译', '生成本周回访图谱草稿', 'Codex 编译章节，本分支编译关系'),
+        taskRow('T4', '叙述偏好', '学习可见可改的叙述偏好', '与 Codex 同'),
+      ]),
+
+      el('div', { class: 'section-title' }, ['四道门']),
+      el('div', { class: 'card' }, [
+        gateRow('事实门', '检查是否新增无来源事实', '失败则删除该句'),
+        gateRow('语气门', '检查是否过度煽情或替用户总结意义', '降级为朴素版本'),
+        gateRow('隐私门', '检查人物/地点/儿童/健康等敏感内容', '分享前二次确认'),
+        gateRow('认领门', '用户永远有最后一句话', '反馈优先级高于模型评分'),
+      ]),
+      el('p', { class: 'muted mt-3', style: 'font-size:11px;' }, [
+        '铁律：AI 不改写过去的记忆。回访追加的"现在再看"必须保留用户原话。原始线索 / AI 草稿 / 用户确认版三态分离。',
+      ]),
+
+      el('div', { class: 'section-title' }, ['移动端 AI 分层 L0–L4']),
+      el('div', { class: 'card' }, [
+        layerRow('L0', '无 AI 规则层', '0', '所有用户底座', 'badge--pass'),
+        layerRow('L1', '免费云额度', '低', '轻量 T0/T1', 'badge--poc'),
+        layerRow('L2', 'DeepSeek V4 Flash', '低', 'T0–T3 主力', 'badge--poc'),
+        layerRow('L3', 'BYOK 自带 Key', '0', '高级用户', 'badge--todo'),
+        layerRow('L4', '本地 AI', '设备', '未来增强', 'badge--todo'),
+      ]),
+      el('p', { class: 'muted mt-3', style: 'font-size:11px;' }, ['Free 用户靠 L0 规则层完成核心价值，AI 是有限增强，不是命门。当前 Demo 不调真实 API。']),
+
+      el('div', { class: 'section-title' }, ['AI 任务账本（可审计 · 可撤销）']),
+      log.length ? el('div', { class: 'card' }, log.slice(0, 10).map(t =>
+        el('div', { class: 'list-row' }, [
+          el('div', { class: 'list-row__icon' }, [t.type === 'T2' ? '✦' : t.type === 'T1' ? '✎' : '⚙']),
+          el('div', { class: 'list-row__main' }, [
+            el('div', { class: 'list-row__title' }, [t.type + ' · ' + (t.payload && t.payload.action || '任务')]),
+            el('div', { class: 'list-row__sub' }, [fmtRelative(t.at) + ' · ' + (t.localOnly ? '仅设备' : '云端') + ' · ' + t.result]),
+          ]),
+          el('div', { class: 'list-row__right' }, [
+            t.status === 'reverted'
+              ? el('span', { class: 'badge badge--todo' }, ['已撤销'])
+              : el('button', { class: 'btn btn--sm btn--ghost', onclick: () => { TSD.revertAiTask(t.id); navigate('ai'); } }, ['撤销']),
+          ]),
+        ])
+      )) : el('div', { class: 'card muted text-center', style: 'font-size:13px;' }, ['还没有 AI 任务记录。回访一次会产生 T1 记录。']),
+
+      el('div', { class: 'section-title' }, ['数据离机账本']),
+      el('div', { class: 'card' }, [
+        el('div', { class: 'list-row' }, [el('div', { class: 'list-row__icon' }, ['📵']), el('div', { class: 'list-row__main' }, [el('div', { class: 'list-row__title' }, ['当前']), el('div', { class: 'list-row__sub' }, ['所有任务仅设备处理，无数据离开本机'])]), el('div', { class: 'list-row__right' }, [el('span', { class: 'badge badge--pass' }, ['PASS'])])]),
+        el('div', { class: 'list-row' }, [el('div', { class: 'list-row__icon' }, ['👤']), el('div', { class: 'list-row__main' }, [el('div', { class: 'list-row__title' }, ['user_id 假名']), el('div', { class: 'list-row__sub' }, ['生产版只传不可逆假名，不含手机号/邮箱'])]), el('div', { class: 'list-row__right' }, [el('span', { class: 'badge badge--poc' }, ['PoC'])])]),
+      ]),
+    ]));
+
+    function taskRow(t, name, desc, diff, highlight) {
+      return el('div', { class: 'list-row' }, [
+        el('div', { class: 'list-row__icon' + (highlight ? '' : ''), style: highlight ? 'background:var(--accent-glow);color:var(--accent);' : '' }, [t]),
+        el('div', { class: 'list-row__main' }, [
+          el('div', { class: 'list-row__title' }, [name + (highlight ? ' · 本分支专属' : '')]),
+          el('div', { class: 'list-row__sub' }, [desc]),
+          el('div', { class: 'muted', style: 'font-size:10px;margin-top:2px;color:var(--fg-faint);' }, [diff]),
+        ]),
+      ]);
+    }
+    function gateRow(name, desc, fail) {
+      return el('div', { class: 'list-row' }, [
+        el('div', { class: 'list-row__icon' }, ['⌬']),
+        el('div', { class: 'list-row__main' }, [
+          el('div', { class: 'list-row__title' }, [name]),
+          el('div', { class: 'list-row__sub' }, [desc + ' · ' + fail]),
+        ]),
+      ]);
+    }
+    function layerRow(l, name, cost, role, badgeClass) {
+      return el('div', { class: 'list-row' }, [
+        el('div', { class: 'list-row__icon' }, [l]),
+        el('div', { class: 'list-row__main' }, [
+          el('div', { class: 'list-row__title' }, [name]),
+          el('div', { class: 'list-row__sub' }, [role + ' · 成本 ' + cost]),
+        ]),
+        el('div', { class: 'list-row__right' }, [el('span', { class: 'badge ' + badgeClass }, [l === 'L0' ? 'PASS' : l === 'L4' ? 'TODO' : 'PoC'])]),
+      ]);
+    }
+  });
+
+  // ============================================================
+  // 视图：settings
+  // ============================================================
+  route('settings', ({ view, navigate }) => {
+    const s = TSD.raw();
+
+    view.appendChild(el('div', {}, [
+      el('h2', { class: 'h2 mb-5' }, ['设置']),
+
+      el('div', { class: 'section-title' }, ['账户权利中心']),
+      el('div', { class: 'card' }, [
+        el('div', { class: 'setting-row' }, [
+          el('div', { class: 'setting-row__main' }, [el('div', { class: 'setting-row__title' }, ['当前方案']), el('div', { class: 'setting-row__sub' }, [tierLabel(s.account.tier)])]),
+          el('span', { class: 'chip chip--accent' }, [s.account.tier.toUpperCase()]),
+        ]),
+        el('div', { class: 'setting-row' }, [el('div', { class: 'setting-row__main' }, [el('div', { class: 'setting-row__title' }, ['访客通行证']), el('div', { class: 'setting-row__sub' }, ['不登录也能记录和回访'])]), el('span', { class: 'badge badge--pass' }, ['PASS'])]),
+        el('div', { class: 'setting-row' }, [el('div', { class: 'setting-row__main' }, [el('div', { class: 'setting-row__title' }, ['恢复钥匙']), el('div', { class: 'setting-row__sub' }, ['用户拥有，理解丢失后果'])]), el('span', { class: 'badge badge--poc' }, ['PoC'])]),
+        el('div', { class: 'setting-row' }, [el('div', { class: 'setting-row__main' }, [el('div', { class: 'setting-row__title' }, ['退订取回窗口']), el('div', { class: 'setting-row__sub' }, ['退订后记忆仍可查看/编辑/导出'])]), el('span', { class: 'badge badge--poc' }, ['PoC'])]),
+      ]),
+      el('p', { class: 'muted mt-2', style: 'font-size:11px;' }, ['账号是钥匙，不是牢笼。记忆不做人质。']),
+
+      el('div', { class: 'section-title' }, ['价值阶梯']),
+      el('div', { class: 'card' }, [
+        ['free','记住 Free','永久免费 · 无限回访/层叠/本地导出'],
+        ['pass','本地典藏 Pass','¥68–98 买断 · 高级本地视图/导出'],
+        ['plus','时光生长 Plus','¥18/月 · E2EE 同步/云端 AI'],
+        ['family','一起走过 Family','¥228–298/年 · 家庭 Vault（后置）'],
+      ].map(([id, name, sub]) =>
+        el('div', { class: 'setting-row', onclick: () => { TSD.setTier(id); navigate('settings'); } }, [
+          el('div', { class: 'setting-row__main' }, [el('div', { class: 'setting-row__title' }, [name]), el('div', { class: 'setting-row__sub' }, [sub])]),
+          s.account.tier === id ? el('span', { class: 'chip chip--accent' }, ['当前']) : el('span', { class: 'muted', style: 'font-size:11px;' }, ['选择 ›']),
+        ])
+      )),
+
+      el('div', { class: 'section-title' }, ['隐私与 AI']),
+      el('div', { class: 'card' }, [
+        el('div', { class: 'setting-row' }, [
+          el('div', { class: 'setting-row__main' }, [el('div', { class: 'setting-row__title' }, ['隐私模式']), el('div', { class: 'setting-row__sub' }, [s.privacyMode === 'private' ? '私密模式 · 默认不出设备' : 'AI 辅助模式'])]),
+          el('button', { class: 'switch' + (s.privacyMode === 'ai-assist' ? ' is-on' : ''), onclick: () => { TSD.setPrivacyMode(s.privacyMode === 'private' ? 'ai-assist' : 'private'); navigate('settings'); } }, []),
+        ]),
+        el('div', { class: 'setting-row' }, [
+          el('div', { class: 'setting-row__main' }, [el('div', { class: 'setting-row__title' }, ['AI 同意']), el('div', { class: 'setting-row__sub' }, ['每次任务前明确授权，可撤回'])]),
+          el('button', { class: 'switch' + (s.aiConsent ? ' is-on' : ''), onclick: () => { TSD.setAiConsent(!s.aiConsent); navigate('settings'); } }, []),
+        ]),
+        el('div', { class: 'setting-row', onclick: () => navigate('ai') }, [el('div', { class: 'setting-row__main' }, [el('div', { class: 'setting-row__title' }, ['AI 任务账本']), el('div', { class: 'setting-row__sub' }, ['查看/撤销所有 AI 任务'])]), el('div', { class: 'list-row__right' }, ['▸'])]),
+      ]),
+
+      el('div', { class: 'section-title' }, ['记忆保险箱']),
+      el('div', { class: 'card' }, [
+        el('div', { class: 'setting-row' }, [el('div', { class: 'setting-row__main' }, [el('div', { class: 'setting-row__title' }, ['本地数据']), el('div', { class: 'setting-row__sub' }, [TSD.getMoments().length + ' 个瞬间 · ' + TSD.raw().revisits.length + ' 次回访'])]), el('span', { class: 'badge badge--pass' }, ['本地'])]),
+        el('div', { class: 'setting-row', onclick: () => { const d = TSD.exportData(); downloadJSON(d); toast('已导出 JSON'); } }, [el('div', { class: 'setting-row__main' }, [el('div', { class: 'setting-row__title' }, ['导出全部']), el('div', { class: 'setting-row__sub' }, ['可带走的完整记忆包'])]), el('div', { class: 'list-row__right' }, ['⤓'])]),
+        el('div', { class: 'setting-row', onclick: () => { if (confirm('确定清空所有本地数据？此操作不可撤销。')) { TSD.clearAll(); toast('已清空'); navigate('today', { replace: true }); } } }, [el('div', { class: 'setting-row__main' }, [el('div', { class: 'setting-row__title' }, ['清空本地数据']), el('div', { class: 'setting-row__sub' }, ['包括所有瞬间和回访记录'])]), el('div', { class: 'list-row__right' }, ['⊘'])]),
+      ]),
+
+      el('div', { class: 'section-title' }, ['外观']),
+      el('div', { class: 'card' }, [
+        el('div', { class: 'setting-row' }, [el('div', { class: 'setting-row__main' }, [el('div', { class: 'setting-row__title' }, ['深色模式']), el('div', { class: 'setting-row__sub' }, [s.settings.darkMode === 'auto' ? '跟随系统' : s.settings.darkMode])]), el('button', { class: 'btn btn--sm btn--ghost', onclick: () => { TSD.setSetting('darkMode', s.settings.darkMode === 'auto' ? 'dark' : 'auto'); location.reload(); } }, ['切换'])]),
+        el('div', { class: 'setting-row' }, [el('div', { class: 'setting-row__main' }, [el('div', { class: 'setting-row__title' }, ['减少动效']), el('div', { class: 'setting-row__sub' }, ['降低动画与过渡'])]), el('button', { class: 'switch' + (s.settings.reducedMotion ? ' is-on' : ''), onclick: () => { TSD.setSetting('reducedMotion', !s.settings.reducedMotion); document.body.style.transition = 'none'; navigate('settings'); } }, [])]),
+      ]),
+
+      el('div', { class: 'section-title' }, ['试用指南 & 审核']),
+      el('div', { class: 'card' }, [
+        el('div', { class: 'setting-row', onclick: () => openTrialGuide(navigate) }, [el('div', { class: 'setting-row__main' }, [el('div', { class: 'setting-row__title' }, ['试用指南']), el('div', { class: 'setting-row__sub' }, ['3 分钟体验路线、当前可点能力'])]), el('div', { class: 'list-row__right' }, ['▸'])]),
+        el('div', { class: 'setting-row', onclick: () => navigate('qa') }, [el('div', { class: 'setting-row__main' }, [el('div', { class: 'setting-row__title' }, ['Demo QA Console']), el('div', { class: 'setting-row__sub' }, ['PASS/POC/TODO 计分与验收路线'])]), el('div', { class: 'list-row__right' }, ['▸'])]),
+      ]),
+
+      el('div', { class: 'section-title' }, ['关于']),
+      el('div', { class: 'card text-center muted', style: 'font-size:12px;line-height:1.6;' }, [
+        el('div', { class: 'serif', style: 'font-size:16px;color:var(--fg);margin-bottom:8px;' }, ['TimeSlowDown · Claude Code 分支']),
+        '论点：回访（retrieval practice）',
+        el('br'),
+        '让走过的时间，长成你的人生。',
+        el('div', { class: 'mt-3', style: 'font-size:11px;color:var(--fg-faint);' }, ['M1 Web Demo · 不等同 iOS 生产版本']),
+      ]),
+    ]));
+  });
+
+  function tierLabel(t) { return { free: '记住 Free · 永久免费', pass: '本地典藏 Pass', plus: '时光生长 Plus', family: '一起走过 Family' }[t] || t; }
+
+  // ============================================================
+  // 视图：qa Demo QA Console
+  // ============================================================
+  route('qa', ({ view, navigate }) => {
+    const checks = [
+      ['回声主入口可见', 'today', 'PASS', '进入 App 首屏即"今天的回声"'],
+      ['回访限时 10 秒', 'revisit/m-seed-01', 'PASS', '进入重温后倒计时'],
+      ['回访追加层叠保留原话', 'revisit/m-seed-01', 'PASS', 'AI 不改写'],
+      ['反信息茧房：7天≥3个不同', 'today', 'POC', '调度含随机扰动'],
+      ['冷启动种子', 'today', 'PASS', '8 条种子瞬间'],
+      ['三个月对照指标', 'today', 'PASS', '回访 vs 未回访可讲述'],
+      ['影像作为回访入口', 'media', 'TODO', '待真实 Photos Picker'],
+      ['人生周格旷野', 'wilderness', 'PASS', '含变厚/花丛/草地'],
+      ['AI 任务账本可撤销', 'ai', 'PASS', 'T1 记录可撤销'],
+      ['四道门可见', 'ai', 'PASS', '事实/语气/隐私/认领'],
+      ['L0–L4 分层', 'ai', 'PASS', '规则层底座'],
+      ['账户权利中心', 'settings', 'POC', '假面，非真实登录'],
+      ['记忆保险箱导出/清空', 'settings', 'PASS', '本地 JSON'],
+      ['价值阶梯四层', 'settings', 'POC', '价格待验证'],
+      ['退订取回窗口', 'settings', 'POC', '假面'],
+      ['E2EE 媒体保险箱路径', 'media', 'TODO', '待真实加密文件库'],
+    ];
+    const pass = checks.filter(c => c[2] === 'PASS').length;
+    const poc = checks.filter(c => c[2] === 'POC').length;
+    const todo = checks.filter(c => c[2] === 'TODO').length;
+
+    view.appendChild(el('div', {}, [
+      el('h2', { class: 'h2 mb-2' }, ['Demo QA Console']),
+      el('p', { class: 'muted mb-5', style: 'font-size:13px;' }, ['试用者和其他 Agent 可确认哪些已可点击验证，哪些仍只是 PoC。']),
+
+      el('div', { class: 'card' }, [
+        el('div', { class: 'flex gap-4' }, [
+          statBlock(String(pass), 'PASS', 'growth'),
+          statBlock(String(poc), 'POC', 'accent'),
+          statBlock(String(todo), 'TODO', 'mute'),
+        ]),
+        el('div', { class: 'divider', style: 'margin:16px 0;' }),
+        el('div', { class: 'muted', style: 'font-size:12px;' }, ['总计 ' + checks.length + ' 项 · 通过率 ' + Math.round(pass / checks.length * 100) + '%']),
+      ]),
+
+      el('div', { class: 'section-title' }, ['验收清单']),
+      el('div', { class: 'card' }, checks.map(c =>
+        el('div', { class: 'list-row' }, [
+          el('div', { class: 'list-row__icon' }, [c[2] === 'PASS' ? '✓' : c[2] === 'POC' ? '○' : '·']),
+          el('div', { class: 'list-row__main' }, [
+            el('div', { class: 'list-row__title' }, [c[0]]),
+            el('div', { class: 'list-row__sub' }, [c[3]]),
+          ]),
+          el('div', { class: 'list-row__right' }, [
+            el('span', { class: 'badge badge--' + c[2].toLowerCase() }, [c[2]]),
+            el('button', { class: 'btn btn--sm btn--ghost', style: 'margin-left:8px;', onclick: () => navigate(c[1]) }, ['试']),
+          ]),
+        ])
+      )),
+
+      el('div', { class: 'section-title' }, ['9 步人工 smoke 路线']),
+      el('div', { class: 'card' }, [
+        '1. 首屏看到今天的回声',
+        el('br'), '2. 点"带回这一刻"进入回访',
+        el('br'), '3. 等 10 秒计时结束',
+        el('br'), '4. 补一句"现在再看"并保存',
+        el('br'), '5. 回到首屏看本周回访图谱',
+        el('br'), '6. 查看三个月对照指标',
+        el('br'), '7. 进旷野看人生周格',
+        el('br'), '8. 进 AI 看任务账本',
+        el('br'), '9. 进设置导出 JSON',
+      ]),
+
+      el('button', { class: 'btn btn--ghost btn--block mt-4', onclick: () => {
+        const report = 'TSD Claude Code 分支 QA 报告\n' + '='.repeat(40) + '\n'
+          + '时间: ' + new Date().toLocaleString('zh-CN') + '\n'
+          + 'PASS: ' + pass + ' / POC: ' + poc + ' / TODO: ' + todo + '\n\n'
+          + checks.map(c => '[' + c[2] + '] ' + c[0]).join('\n');
+        navigator.clipboard.writeText(report).then(() => toast('QA 报告已复制'));
+      } }, ['复制 QA 报告']),
+    ]));
+  });
+
+  // ============================================================
+  // 视图：capture 留下新瞬间（可选，非主交付）
+  // ============================================================
+  route('capture', ({ view, navigate }) => {
+    view.appendChild(el('div', {}, [
+      el('h2', { class: 'h2 mb-2' }, ['留下一个瞬间']),
+      el('p', { class: 'muted mb-5', style: 'font-size:13px;' }, [
+        '本分支主交付是回访，不是记录。但新瞬间会成为未来回访的种子。'
+      ]),
+      el('textarea', {
+        id: 'cap-quote', placeholder: '一句你以后想被带回的话…',
+        style: 'width:100%;min-height:100px;padding:14px;background:var(--bg-elev);border:1px solid var(--line-strong);border-radius:14px;font-size:16px;font-family:var(--font-serif);resize:none;',
+      }),
+      el('div', { class: 'section-title' }, ['类型']),
+      el('div', { class: 'flex gap-2 mb-4', id: 'cap-kind' }, [
+        ...[['grass','日常'],['bloom','高光'],['night','平淡']].map(([k, l], i) =>
+          el('button', { class: 'chip' + (i === 0 ? ' chip--growth' : ''), 'data-k': k, onclick: (e) => {
+            $$('#cap-kind .chip').forEach(c => c.className = 'chip');
+            e.target.className = 'chip chip--' + (k === 'bloom' ? 'bloom' : k === 'night' ? 'night' : 'growth');
+          } }, [l]))
+      ]),
+      el('div', { class: 'section-title' }, ['人物（逗号分隔，可选）']),
+      el('input', { id: 'cap-people', placeholder: '比如：爸爸, 老朋友', style: 'width:100%;padding:12px;background:var(--bg-elev);border:1px solid var(--line-strong);border-radius:10px;margin-bottom:16px;' }),
+      el('div', { class: 'flex gap-3' }, [
+        el('button', { class: 'btn btn--ghost btn--lg', style: 'flex:1', onclick: () => navigate('today') }, ['取消']),
+        el('button', { class: 'btn btn--primary btn--lg', style: 'flex:1', onclick: () => {
+          const q = $('#cap-quote').value.trim();
+          if (!q) { toast('写一句吧'); return; }
+          const kindEl = $$('#cap-kind .chip').find(c => c.className.includes('chip--'));
+          const kind = kindEl ? kindEl.getAttribute('data-k') : 'grass';
+          const people = $('#cap-people').value.split(',').map(s => s.trim()).filter(Boolean);
+          TSD.addMoment({ quote: q, kind, people, when: { precision: 'day', text: '今天', start: Math.floor(Date.now()/1000) } });
+          TSD.logAiTask({ type: 'T0', payload: { action: 'extract', quote: q }, result: '本地结构抽取，未上传', localOnly: true });
+          toast('已留住。它会在某天被带回给你。');
+          navigate('today');
+        } }, ['留住']),
+      ]),
+    ]));
+  });
+
+  // ---------- 分享 sheet ----------
+  function openShareSheet(m, revs, navigate) {
+    const content = el('div', {}, [
+      el('h3', { class: 'h3 mb-3' }, ['分享这一刻']),
+      el('div', { class: 'card mb-4', id: 'share-preview', style: 'background:linear-gradient(160deg,var(--bg-elev),var(--bg-elev-2));border:1px solid var(--line-accent);' }, [
+        el('div', { class: 'echo-card__label', style: 'position:relative;' }, ['回访 · ' + revs.length + ' 次']),
+        el('div', { class: 'serif', style: 'font-size:18px;line-height:1.5;margin:12px 0;position:relative;' }, ['"' + (revs.length ? revs[revs.length-1].feeling || m.quote : m.quote) + '"']),
+        el('div', { class: 'muted', style: 'font-size:11px;position:relative;' }, ['TimeSlowDown · 让走过的时间长成你的人生']),
+      ]),
+      el('div', { class: 'section-title' }, ['隐私层级']),
+      el('div', { class: 'card' }, [
+        el('div', { class: 'setting-row', onclick: () => toast('私密版保留原话，仅发给指定的人') }, [el('div', { class: 'setting-row__main' }, [el('div', { class: 'setting-row__title' }, ['讲给一个人']), el('div', { class: 'setting-row__sub' }, ['保留原话，接收者无需注册'])]), el('span', { class: 'chip chip--accent' }, ['私密'])]),
+        el('div', { class: 'setting-row', onclick: () => toast('公开版已隐藏人名/地点/原文') }, [el('div', { class: 'setting-row__main' }, [el('div', { class: 'setting-row__title' }, ['分享一幅风景']), el('div', { class: 'setting-row__sub' }, ['隐藏人名、地点、原文，只留抽象'])]), el('span', { class: 'chip' }, ['公开'])]),
+      ]),
+      el('button', { class: 'btn btn--primary btn--block mt-4', onclick: () => {
+        const text = '“' + m.quote + '”\n— 回访 ' + revs.length + ' 次\nTimeSlowDown';
+        navigator.clipboard.writeText(text).then(() => toast('已复制分享文案'));
+      } }, ['复制分享文案']),
+    ]);
+    sheet(content);
+  }
+
+  // ---------- 试用指南 sheet ----------
+  function openTrialGuide(navigate) {
+    const content = el('div', {}, [
+      el('h3', { class: 'h3 mb-3' }, ['试用指南 · 3 分钟']),
+      el('div', { class: 'card mb-3' }, [
+        el('div', { class: 'h3', style: 'font-size:14px;' }, ['1. 今天的回声（30秒）']),
+        el('p', { class: 'muted', style: 'font-size:13px;' }, ['首屏就是被带回的旧瞬间。点"带回这一刻"。']),
+      ]),
+      el('div', { class: 'card mb-3' }, [
+        el('div', { class: 'h3', style: 'font-size:14px;' }, ['2. 回访重温（30秒）']),
+        el('p', { class: 'muted', style: 'font-size:13px;' }, ['限时 10 秒。结束后可补一句"现在再看"。']),
+      ]),
+      el('div', { class: 'card mb-3' }, [
+        el('div', { class: 'h3', style: 'font-size:14px;' }, ['3. 看本周回访图谱（30秒）']),
+        el('p', { class: 'muted', style: 'font-size:13px;' }, ['回到首屏，看这周反复回了哪几个。']),
+      ]),
+      el('div', { class: 'card mb-3' }, [
+        el('div', { class: 'h3', style: 'font-size:14px;' }, ['4. 三个月对照（30秒）']),
+        el('p', { class: 'muted', style: 'font-size:13px;' }, ['看回访固化假设的可视化。']),
+      ]),
+      el('div', { class: 'card mb-3' }, [
+        el('div', { class: 'h3', style: 'font-size:14px;' }, ['5. 旷野 + AI（60秒）']),
+        el('p', { class: 'muted', style: 'font-size:13px;' }, ['人生周格看变厚；AI 页看任务账本。']),
+      ]),
+      el('div', { class: 'section-title' }, ['生产边界']),
+      el('p', { class: 'muted', style: 'font-size:12px;' }, ['当前 Demo：不调真实 API、不请求相册/定位权限、无真实账户系统、无 E2EE 文件库。所有数据仅本地。']),
+    ]);
+    sheet(content);
+  }
+
+  function downloadJSON(d) {
+    const blob = new Blob([JSON.stringify(d, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'tsd-memory-' + Date.now() + '.json';
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  // ---------- 启动 ----------
+  function start() {
+    const path = location.hash.replace('#', '') || 'today';
+    render(path);
+  }
+
+  return { start, navigate };
+})();
+
+document.addEventListener('DOMContentLoaded', () => App.start());

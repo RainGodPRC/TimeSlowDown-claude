@@ -1,0 +1,16 @@
+{
+  "name": "TimeSlowDown · 回访",
+  "short_name": "TSD",
+  "description": "让走过的时间，长成你的人生。每天把你带回一个过去的瞬间。",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f1014",
+  "theme_color": "#0f1014",
+  "lang": "zh-CN",
+  "scope": "./",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
