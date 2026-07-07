@@ -536,8 +536,21 @@ const App = (() => {
       )) : el('div', { class: 'card muted text-center', style: 'font-size:13px;' }, ['还没被回访过。']),
 
       el('button', { class: 'btn btn--primary btn--lg btn--block mt-5', onclick: () => navigate('revisit/' + id) }, ['再回访一次']),
+      el('input', { type: 'file', accept: 'image/*', id: 'moment-photo', style: 'display:none;' }),
+      el('button', { class: 'btn btn--ghost btn--block mt-3', onclick: () => $('#moment-photo', view).click() }, [m.media ? '换一张影像' : '补一张影像（作回访入口）']),
       el('button', { class: 'btn btn--ghost btn--block mt-3', onclick: () => openShareSheet(m, revs, navigate) }, ['分享这一刻']),
     ]));
+    $('#moment-photo', view).addEventListener('change', async (e) => {
+      const f = e.target.files[0];
+      if (!f) return;
+      toast('处理影像…');
+      try {
+        const { dataUrl } = await fileToCompressedDataUrl(f);
+        TSD.updateMoment(id, { media: dataUrl });
+        toast(m.media ? '影像已更新' : '已补影像');
+        navigate('moment/' + id);
+      } catch (err) { toast(err.message || '影像处理失败'); }
+    });
   });
 
   function kindLabel(k) { return { bloom: '高光', grass: '日常', night: '平淡' }[k] || '瞬间'; }
@@ -864,10 +877,16 @@ const App = (() => {
 
       el('div', { class: 'section-title' }, ['记忆保险箱']),
       el('div', { class: 'card' }, [
-        el('div', { class: 'setting-row' }, [el('div', { class: 'setting-row__main' }, [el('div', { class: 'setting-row__title' }, ['本地数据']), el('div', { class: 'setting-row__sub' }, [TSD.getMoments().length + ' 个瞬间 · ' + TSD.raw().revisits.length + ' 次回访'])]), el('span', { class: 'badge badge--pass' }, ['本地'])]),
-        el('div', { class: 'setting-row', onclick: () => { const d = TSD.exportData(); downloadJSON(d); toast('已导出 JSON'); } }, [el('div', { class: 'setting-row__main' }, [el('div', { class: 'setting-row__title' }, ['导出全部']), el('div', { class: 'setting-row__sub' }, ['可带走的完整记忆包'])]), el('div', { class: 'list-row__right' }, ['⤓'])]),
-        el('div', { class: 'setting-row', onclick: () => { if (confirm('确定清空所有本地数据？此操作不可撤销。')) { TSD.clearAll(); toast('已清空'); navigate('today', { replace: true }); } } }, [el('div', { class: 'setting-row__main' }, [el('div', { class: 'setting-row__title' }, ['清空本地数据']), el('div', { class: 'setting-row__sub' }, ['包括所有瞬间和回访记录'])]), el('div', { class: 'list-row__right' }, ['⊘'])]),
+        el('div', { class: 'setting-row' }, [el('div', { class: 'setting-row__main' }, [el('div', { class: 'setting-row__title' }, ['本地数据']), el('div', { class: 'setting-row__sub' }, [TSD.getMoments().length + ' 个瞬间 · ' + TSD.raw().revisits.length + ' 次回访 · ' + TSD.getMoments().filter(m => m.media).length + ' 张影像'])]), el('span', { class: 'badge badge--pass' }, ['本地'])]),
+        el('input', { type: 'file', accept: 'application/json,.json', id: 'set-import', style: 'display:none;' }),
+        el('div', { class: 'setting-row', onclick: () => { const pkg = TSD.makePackage(); downloadJSON(pkg, 'tsd-memory-package-' + Date.now() + '.json'); toast('已导出记忆包（含校验和）'); } }, [el('div', { class: 'setting-row__main' }, [el('div', { class: 'setting-row__title' }, ['导出记忆包']), el('div', { class: 'setting-row__sub' }, ['版本化 JSON + 完整性 checksum，可带走/回灌'])]), el('div', { class: 'list-row__right' }, ['⤓'])]),
+        el('div', { class: 'setting-row', onclick: () => $('#set-import', view).click() }, [el('div', { class: 'setting-row__main' }, [el('div', { class: 'setting-row__title' }, ['导入记忆包（校验）']), el('div', { class: 'setting-row__sub' }, ['先校验 schema 与 checksum，再决定写入'])]), el('div', { class: 'list-row__right' }, ['⤒'])]),
+        el('div', { class: 'setting-row', onclick: () => openDeleteSheet(navigate) }, [el('div', { class: 'setting-row__main' }, [el('div', { class: 'setting-row__title' }, ['清空本地数据']), el('div', { class: 'setting-row__sub' }, ['生成回执 · 会话内可撤销'])]), el('div', { class: 'list-row__right' }, ['⊘'])]),
       ]),
+      TSD.hasTombstone() ? el('div', { class: 'card mt-3', style: 'border:1px solid var(--bloom);' }, [
+        el('div', { class: 'setting-row' }, [el('div', { class: 'setting-row__main' }, [el('div', { class: 'setting-row__title' }, ['可撤销刚才的删除']), el('div', { class: 'setting-row__sub' }, ['墓碑仍保留，一键恢复删除前数据'])]), el('span', { class: 'badge badge--poc' }, ['可撤销'])]),
+        el('button', { class: 'btn btn--primary btn--block mt-2', onclick: () => { if (TSD.restoreTombstone()) { toast('已恢复删除前的数据'); navigate('today', { replace: true }); } else toast('恢复失败'); } }, ['撤销删除']),
+      ]) : null,
 
       el('div', { class: 'section-title' }, ['外观']),
       el('div', { class: 'card' }, [
@@ -890,6 +909,15 @@ const App = (() => {
         el('div', { class: 'mt-3', style: 'font-size:11px;color:var(--fg-faint);' }, ['M1 Web Demo · 不等同 iOS 生产版本']),
       ]),
     ]));
+    $('#set-import', view).addEventListener('change', async (e) => {
+      const f = e.target.files[0];
+      if (!f) return;
+      try {
+        const pkg = JSON.parse(await f.text());
+        openImportSheet(pkg, navigate);
+      } catch (err) { toast('读取 JSON 失败'); }
+      e.target.value = '';
+    });
   });
 
   function tierLabel(t) { return { free: '记住 Free · 永久免费', pass: '本地典藏 Pass', plus: '时光生长 Plus', family: '一起走过 Family' }[t] || t; }
@@ -905,13 +933,15 @@ const App = (() => {
       ['反信息茧房：7天≥3个不同', 'today', 'POC', '调度含随机扰动'],
       ['冷启动种子', 'today', 'PASS', '8 条种子瞬间'],
       ['三个月对照指标', 'today', 'PASS', '回访 vs 未回访可讲述'],
-      ['影像作为回访入口', 'media', 'TODO', '待真实 Photos Picker'],
+      ['影像作为回访入口', 'media', 'PASS', '真实照片选择器+压缩+事后补影像'],
       ['人生周格旷野', 'wilderness', 'PASS', '含变厚/花丛/草地'],
       ['AI 任务账本可撤销', 'ai', 'PASS', 'T1 记录可撤销'],
       ['四道门可见', 'ai', 'PASS', '事实/语气/隐私/认领'],
       ['L0–L4 分层', 'ai', 'PASS', '规则层底座'],
       ['账户权利中心', 'settings', 'POC', '假面，非真实登录'],
-      ['记忆保险箱导出/清空', 'settings', 'PASS', '本地 JSON'],
+      ['记忆保险箱导出/清空', 'settings', 'PASS', '版本化包+checksum'],
+      ['导出包校验/导入', 'settings', 'PASS', 'checksum 校验+回灌写入'],
+      ['删除回执+会话内撤销', 'settings', 'PASS', '回执 token+墓碑撤销'],
       ['价值阶梯四层', 'settings', 'POC', '价格待验证'],
       ['退订取回窗口', 'settings', 'POC', '假面'],
       ['E2EE 媒体保险箱路径', 'media', 'TODO', '待真实加密文件库'],
@@ -976,6 +1006,7 @@ const App = (() => {
   // 视图：capture 留下新瞬间（可选，非主交付）
   // ============================================================
   route('capture', ({ view, navigate }) => {
+    let pendingMedia = null;
     view.appendChild(el('div', {}, [
       el('h2', { class: 'h2 mb-2' }, ['留下一个瞬间']),
       el('p', { class: 'muted mb-5', style: 'font-size:13px;' }, [
@@ -995,6 +1026,10 @@ const App = (() => {
       ]),
       el('div', { class: 'section-title' }, ['人物（逗号分隔，可选）']),
       el('input', { id: 'cap-people', placeholder: '比如：爸爸, 老朋友', style: 'width:100%;padding:12px;background:var(--bg-elev);border:1px solid var(--line-strong);border-radius:10px;margin-bottom:16px;' }),
+      el('div', { class: 'section-title' }, ['影像（可选 · 回访入口）']),
+      el('input', { type: 'file', accept: 'image/*', id: 'cap-photo', style: 'display:none;' }),
+      el('div', { id: 'cap-photo-preview' }),
+      el('button', { class: 'btn btn--ghost btn--sm mb-4', onclick: () => $('#cap-photo', view).click() }, ['＋ 选一张照片（旧影像可作回访入口）']),
       el('div', { class: 'flex gap-3' }, [
         el('button', { class: 'btn btn--ghost btn--lg', style: 'flex:1', onclick: () => navigate('today') }, ['取消']),
         el('button', { class: 'btn btn--primary btn--lg', style: 'flex:1', onclick: () => {
@@ -1003,13 +1038,26 @@ const App = (() => {
           const kindEl = $$('#cap-kind .chip').find(c => c.className.includes('chip--'));
           const kind = kindEl ? kindEl.getAttribute('data-k') : 'grass';
           const people = $('#cap-people').value.split(',').map(s => s.trim()).filter(Boolean);
-          TSD.addMoment({ quote: q, kind, people, when: { precision: 'day', text: '今天', start: Math.floor(Date.now()/1000) } });
-          TSD.logAiTask({ type: 'T0', payload: { action: 'extract', quote: q }, result: '本地结构抽取，未上传', localOnly: true });
+          TSD.addMoment({ quote: q, kind, people, media: pendingMedia, when: { precision: 'day', text: '今天', start: Math.floor(Date.now()/1000) } });
+          TSD.logAiTask({ type: 'T0', payload: { action: 'extract', quote: q, hasMedia: !!pendingMedia }, result: '本地结构抽取，未上传', localOnly: true });
           toast('已留住。它会在某天被带回给你。');
           navigate('today');
         } }, ['留住']),
       ]),
     ]));
+    $('#cap-photo', view).addEventListener('change', async (e) => {
+      const f = e.target.files[0];
+      if (!f) return;
+      toast('处理影像…');
+      try {
+        const { dataUrl } = await fileToCompressedDataUrl(f);
+        pendingMedia = dataUrl;
+        const box = $('#cap-photo-preview', view);
+        box.innerHTML = '';
+        box.appendChild(el('img', { src: dataUrl, style: 'max-width:100%;max-height:220px;border-radius:12px;' }));
+        toast('已选影像（已压缩为本地存储）');
+      } catch (err) { toast(err.message || '影像处理失败'); }
+    });
   });
 
   // ---------- 分享 sheet ----------
@@ -1064,13 +1112,109 @@ const App = (() => {
     sheet(content);
   }
 
-  function downloadJSON(d) {
+  function downloadJSON(d, name) {
     const blob = new Blob([JSON.stringify(d, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = 'tsd-memory-' + Date.now() + '.json';
+    a.href = url; a.download = name || 'tsd-memory-' + Date.now() + '.json';
     a.click();
     URL.revokeObjectURL(url);
+  }
+
+  // 影像 → 压缩 dataURL（避免 LocalStorage 撑爆；原图 4MB 经此变 ~200KB）
+  function fileToCompressedDataUrl(file, opts = {}) {
+    const maxDim = opts.maxDim || 1024;
+    const quality = opts.quality || 0.82;
+    return new Promise((resolve, reject) => {
+      if (!file || !file.type.startsWith('image/')) { reject(new Error('不是图片')); return; }
+      const fr = new FileReader();
+      fr.onload = () => {
+        const img = new Image();
+        img.onload = () => {
+          let w = img.width, h = img.height;
+          if (w > h && w > maxDim) { h = Math.round(h * maxDim / w); w = maxDim; }
+          else if (h > maxDim) { w = Math.round(w * maxDim / h); h = maxDim; }
+          const c = document.createElement('canvas');
+          c.width = w; c.height = h;
+          c.getContext('2d').drawImage(img, 0, 0, w, h);
+          resolve({ dataUrl: c.toDataURL('image/jpeg', quality), w, h });
+        };
+        img.onerror = () => reject(new Error('图片解码失败'));
+        img.src = fr.result;
+      };
+      fr.onerror = () => reject(new Error('读取失败'));
+      fr.readAsDataURL(file);
+    });
+  }
+
+  // ---------- 导入校验 / 删除回执 sheet ----------
+  function openImportSheet(pkg, navigate) {
+    const r = TSD.importPackage(pkg);
+    const content = el('div', {}, [
+      el('h3', { class: 'h3 mb-3' }, ['导入校验结果']),
+      el('div', { class: 'card mb-3' }, [
+        el('div', { class: 'list-row' }, [
+          el('div', { class: 'list-row__icon', style: r.matched ? 'background:var(--accent-glow);color:var(--accent);' : 'background:rgba(220,120,120,0.16);color:#c66;' }, [r.matched ? '✓' : '✗']),
+          el('div', { class: 'list-row__main' }, [
+            el('div', { class: 'list-row__title' }, [r.matched ? '完整性校验通过' : '校验未通过']),
+            el('div', { class: 'list-row__sub' }, [r.matched ? 'schema · 版本 · checksum 一致' : (r.errors[0] || '未知错误')]),
+          ]),
+        ]),
+        r.counts ? el('div', { class: 'list-row' }, [
+          el('div', { class: 'list-row__icon' }, ['◇']),
+          el('div', { class: 'list-row__main' }, [
+            el('div', { class: 'list-row__title' }, ['包内计数']),
+            el('div', { class: 'list-row__sub' }, [(r.counts.moments || 0) + ' 个瞬间 · ' + (r.counts.revisits || 0) + ' 次回访 · ' + (r.counts.aiLog || 0) + ' 条 AI 任务']),
+          ]),
+        ]) : null,
+      ]),
+      r.ok
+        ? el('button', { class: 'btn btn--primary btn--block mt-3', onclick: () => { TSD.applyImport(pkg); toast('已导入（覆盖本地）'); navigate('today', { replace: true }); } }, ['确认导入（覆盖本地）'])
+        : el('p', { class: 'muted text-center', style: 'font-size:12px;' }, ['校验未通过，已拒绝导入以免损坏数据。']),
+    ]);
+    sheet(content);
+  }
+
+  function openDeleteSheet(navigate) {
+    const raw = TSD.raw();
+    const counts = { moments: TSD.getMoments().length, revisits: raw.revisits.length, aiLog: raw.aiLog.length };
+    const content = el('div', {}, [
+      el('h3', { class: 'h3 mb-3' }, ['清空本地数据']),
+      el('div', { class: 'card mb-3' }, [
+        el('div', { class: 'muted', style: 'font-size:12px;margin-bottom:10px;' }, ['将永久删除以下本地数据（生成回执，会话内可撤销）：']),
+        el('div', { class: 'flex gap-4' }, [
+          statBlock(String(counts.moments), '瞬间', 'accent'),
+          statBlock(String(counts.revisits), '回访', 'growth'),
+          statBlock(String(counts.aiLog), 'AI任务', 'mute'),
+        ]),
+      ]),
+      el('div', { class: 'section-title' }, ['输入「我确定」以确认']),
+      el('input', { id: 'del-confirm', placeholder: '我确定', style: 'width:100%;padding:12px;background:var(--bg-elev);border:1px solid var(--line-strong);border-radius:10px;margin-bottom:16px;text-align:center;' }),
+      el('button', { class: 'btn btn--lg btn--block', id: 'del-btn', disabled: true, style: 'opacity:0.5;' }, ['永久删除 · 生成回执']),
+    ]);
+    const s = sheet(content);
+    const input = $('#del-confirm', s);
+    const btn = $('#del-btn', s);
+    input.addEventListener('input', () => {
+      const ok = input.value.trim() === '我确定';
+      btn.disabled = !ok;
+      btn.style.opacity = ok ? '1' : '0.5';
+      btn.className = 'btn btn--lg btn--block ' + (ok ? 'btn--primary' : '');
+    });
+    btn.addEventListener('click', () => {
+      if (btn.disabled) return;
+      const receipt = TSD.softDelete();
+      downloadJSON({
+        receiptToken: receipt.receiptToken,
+        savedAt: receipt.savedAt,
+        savedAtText: new Date(receipt.savedAt).toLocaleString('zh-CN'),
+        counts: receipt.counts,
+        note: '本地删除回执 · 非密码学 · 不构成外部凭证',
+      }, 'tsd-deletion-receipt-' + receipt.savedAt + '.json');
+      if (s._close) s._close();
+      toast('已删除 · 回执已下载 · 设置内可撤销');
+      navigate('settings');
+    });
   }
 
   // ---------- 启动 ----------

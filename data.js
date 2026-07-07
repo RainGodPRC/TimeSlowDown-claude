@@ -368,6 +368,91 @@ const TSD = (() => {
     save();
   }
 
+  // ---------- 记忆包：版本化导出 / 校验 / 导入 ----------
+  // 非密码学完整性校验（djb2 变体）：用于检测传输/存储损坏，不用于防篡改
+  function checksum(str) {
+    let h = 5381;
+    for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) | 0;
+    return (h >>> 0).toString(16).padStart(8, '0');
+  }
+  const PKG_VERSION = 1;
+
+  function makePackage() {
+    const data = JSON.parse(JSON.stringify(state));
+    const body = JSON.stringify(data);
+    return {
+      schema: 'tsd-memory-package',
+      pkgVersion: PKG_VERSION,
+      appVersion: VERSION,
+      exportedAt: Date.now(),
+      counts: { moments: data.moments.length, revisits: data.revisits.length, aiLog: data.aiLog.length },
+      checksum: checksum(body),
+      note: '非密码学校验和，仅检测损坏',
+      data,
+    };
+  }
+
+  // 校验包，返回 { ok, errors[], matched, counts, ... }，不写状态
+  function importPackage(pkg) {
+    const errors = [];
+    if (!pkg || typeof pkg !== 'object') { errors.push('包不是有效对象'); }
+    else {
+      if (pkg.schema !== 'tsd-memory-package') errors.push('schema 不匹配（期望 tsd-memory-package）');
+      if (typeof pkg.pkgVersion !== 'number') errors.push('缺少 pkgVersion');
+      if (pkg.pkgVersion !== PKG_VERSION) errors.push('包版本不匹配（期望 ' + PKG_VERSION + '，包内 ' + pkg.pkgVersion + '）');
+      if (!pkg.data || typeof pkg.data !== 'object') errors.push('缺少 data 字段');
+      else if (pkg.data.version !== VERSION) errors.push('数据版本不匹配（期望 ' + VERSION + '，包内 ' + pkg.data.version + '）');
+    }
+    if (errors.length) return { ok: false, errors, matched: false, counts: null };
+    const body = JSON.stringify(pkg.data);
+    const calc = checksum(body);
+    const matched = (calc === pkg.checksum);
+    if (!matched) errors.push('完整性校验失败：checksum 不一致，包可能损坏或被改动');
+    return {
+      ok: matched, errors, matched,
+      counts: pkg.counts || { moments: pkg.data.moments.length, revisits: pkg.data.revisits.length, aiLog: pkg.data.aiLog.length },
+      checksumExpected: pkg.checksum, checksumActual: calc,
+    };
+  }
+  // 校验通过后调用：替换状态
+  function applyImport(pkg) {
+    state = JSON.parse(JSON.stringify(pkg.data));
+    save();
+    return state;
+  }
+
+  // ---------- 软删除 + 墓碑撤销 ----------
+  // 删除前快照到独立 key，生成回执；用户可在会话内撤销
+  const TOMBSTONE_KEY = KEY + '-tombstone';
+
+  function softDelete() {
+    const counts = { moments: state.moments.length, revisits: state.revisits.length, aiLog: state.aiLog.length };
+    const savedAt = Date.now();
+    try {
+      localStorage.setItem(TOMBSTONE_KEY, JSON.stringify({ savedAt, data: JSON.parse(JSON.stringify(state)) }));
+    } catch (e) {}
+    state = freshState();
+    state.onboarded = true;
+    save();
+    return { receiptToken: 'TSD-DEL-' + savedAt.toString(36).toUpperCase(), savedAt, counts };
+  }
+  function hasTombstone() {
+    try { return !!localStorage.getItem(TOMBSTONE_KEY); } catch (e) { return false; }
+  }
+  function restoreTombstone() {
+    try {
+      const raw = localStorage.getItem(TOMBSTONE_KEY);
+      if (!raw) return false;
+      state = JSON.parse(raw).data;
+      save();
+      localStorage.removeItem(TOMBSTONE_KEY);
+      return true;
+    } catch (e) { return false; }
+  }
+  function clearTombstone() {
+    try { localStorage.removeItem(TOMBSTONE_KEY); } catch (e) {}
+  }
+
   // ---------- 生命周格 ----------
   function lifeWeeks() {
     if (!state.birthYear) return null;
@@ -387,6 +472,8 @@ const TSD = (() => {
     setPrivacyMode, setAiConsent, setSetting, setTier,
     logAiTask, revertAiTask, getAiLog,
     exportData, clearAll, lifeWeeks,
+    makePackage, importPackage, applyImport,
+    softDelete, hasTombstone, restoreTombstone, clearTombstone,
     SEED_MOMENTS,
   };
 })();
