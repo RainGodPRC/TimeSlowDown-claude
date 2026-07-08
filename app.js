@@ -1159,25 +1159,69 @@ const App = (() => {
   });
 
   // ---------- 分享 sheet ----------
+  // canvas 中文按字符换行
+  function canvasWrap(ctx, text, x, y, maxW, lh) {
+    let line = '', cy = y;
+    for (const ch of text) {
+      if (ctx.measureText(line + ch).width > maxW && line) { ctx.fillText(line, x, cy); line = ch; cy += lh; }
+      else line += ch;
+    }
+    if (line) ctx.fillText(line, x, cy);
+    return cy;
+  }
+  // 渲染可分享"重逢卡"（1080×1350 社交肖像 · 深色旷野美学 · 原则7：分享成品非 Feed）
+  function renderRevisitCard(m, revs) {
+    const W = 1080, H = 1350;
+    const c = document.createElement('canvas'); c.width = W; c.height = H;
+    const ctx = c.getContext('2d');
+    const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#16161e'); g.addColorStop(1, '#0b0b11');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#d8c9a0'; ctx.textAlign = 'left'; ctx.font = '600 28px "PingFang SC",sans-serif';
+    ctx.fillText('TimeSlowDown · 回访', 88, 120);
+    if (revs.length) { ctx.textAlign = 'right'; ctx.font = '500 26px "PingFang SC",sans-serif'; ctx.fillText('回访 ' + revs.length + ' 次', W - 88, 120); }
+    ctx.fillStyle = '#ece8df'; ctx.textAlign = 'left'; ctx.font = '44px "Songti SC","STSong","PingFang SC",serif';
+    let endY = canvasWrap(ctx, '"' + m.quote + '"', 88, 480, W - 176, 70);
+    const last = revs.length ? revs[revs.length - 1].feeling : '';
+    if (last && last.trim()) { ctx.fillStyle = '#a39d92'; ctx.font = 'italic 30px "PingFang SC",serif'; endY = canvasWrap(ctx, '— 现在再看：' + last, 88, endY + 72, W - 176, 50); }
+    ctx.fillStyle = '#6a655c'; ctx.font = '24px "PingFang SC",sans-serif'; ctx.textAlign = 'left';
+    ctx.fillText(fmtWhen(m.when), 88, H - 130);
+    ctx.fillStyle = '#9a7f3a'; ctx.font = '500 26px "PingFang SC",sans-serif'; ctx.textAlign = 'right';
+    ctx.fillText('让走过的时间，长成你的人生', W - 88, H - 130);
+    return c;
+  }
+  // 分享/保存重逢卡：优先 Web Share（文件 → Instagram/微信/系统分享），降级下载
+  async function shareRevisitCard(m, revs) {
+    const canvas = renderRevisitCard(m, revs);
+    const blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
+    const file = new File([blob], 'tsd-revisit-' + Date.now() + '.png', { type: 'image/png' });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try { await navigator.share({ files: [file], title: 'TimeSlowDown · 重逢时刻', text: '"' + m.quote + '" — 回访 ' + revs.length + ' 次' }); return; }
+      catch (e) { /* 取消 */ }
+    }
+    const a = el('a', { href: URL.createObjectURL(blob), download: file.name }); document.body.appendChild(a); a.click(); a.remove();
+    toast('重逢卡已保存为图片');
+  }
   function openShareSheet(m, revs, navigate) {
+    const cardSlot = el('div', { id: 'share-card-slot', class: 'mb-4' });
     const content = el('div', {}, [
       el('h3', { class: 'h3 mb-3' }, ['分享这一刻']),
-      el('div', { class: 'card mb-4', id: 'share-preview', style: 'background:linear-gradient(160deg,var(--bg-elev),var(--bg-elev-2));border:1px solid var(--line-accent);' }, [
-        el('div', { class: 'echo-card__label', style: 'position:relative;' }, ['回访 · ' + revs.length + ' 次']),
-        el('div', { class: 'serif', style: 'font-size:18px;line-height:1.5;margin:12px 0;position:relative;' }, ['"' + (revs.length ? revs[revs.length-1].feeling || m.quote : m.quote) + '"']),
-        el('div', { class: 'muted', style: 'font-size:11px;position:relative;' }, ['TimeSlowDown · 让走过的时间长成你的人生']),
-      ]),
+      cardSlot,
       el('div', { class: 'section-title' }, ['隐私层级']),
       el('div', { class: 'card' }, [
         el('div', { class: 'setting-row', onclick: () => toast('私密版保留原话，仅发给指定的人') }, [el('div', { class: 'setting-row__main' }, [el('div', { class: 'setting-row__title' }, ['讲给一个人']), el('div', { class: 'setting-row__sub' }, ['保留原话，接收者无需注册'])]), el('span', { class: 'chip chip--accent' }, ['私密'])]),
         el('div', { class: 'setting-row', onclick: () => toast('公开版已隐藏人名/地点/原文') }, [el('div', { class: 'setting-row__main' }, [el('div', { class: 'setting-row__title' }, ['分享一幅风景']), el('div', { class: 'setting-row__sub' }, ['隐藏人名、地点、原文，只留抽象'])]), el('span', { class: 'chip' }, ['公开'])]),
       ]),
-      el('button', { class: 'btn btn--primary btn--block mt-4', onclick: () => {
-        const text = '“' + m.quote + '”\n— 回访 ' + revs.length + ' 次\nTimeSlowDown';
-        navigator.clipboard.writeText(text).then(() => toast('已复制分享文案'));
-      } }, ['复制分享文案']),
+      el('button', { class: 'btn btn--primary btn--block mt-4', onclick: () => shareRevisitCard(m, revs) }, ['生成重逢卡 · 分享 / 保存图片']),
+      el('button', { class: 'btn btn--ghost btn--block mt-3', onclick: () => {
+        const text = '"' + m.quote + '"\n— 回访 ' + revs.length + ' 次\nTimeSlowDown';
+        navigator.clipboard.writeText(text).then(() => toast('已复制文案'));
+      } }, ['仅复制文案']),
+      el('p', { class: 'muted mt-3', style: 'font-size:11px;text-align:center;' }, ['分享的是一张成品图，不是公开 Feed。你拥有什么被看见。']),
     ]);
-    sheet(content);
+    const s = sheet(content);
+    const cv = renderRevisitCard(m, revs);
+    cardSlot.appendChild(el('img', { src: cv.toDataURL('image/png'), style: 'width:100%;border-radius:14px;box-shadow:0 8px 30px rgba(0,0,0,.45);', alt: '重逢卡预览' }));
+    return s;
   }
 
   // ---------- 试用指南 sheet ----------
