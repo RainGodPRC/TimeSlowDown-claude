@@ -1,0 +1,20 @@
+{
+  "name": "timeslowdown-claude-revisit",
+  "version": "1.2.0",
+  "description": "TSD 回访分支 — 每天把你带回一个过去的瞬间，让记忆在反复回访里变厚。Claude Code 分支，目标 App Store 商品级。",
+  "private": true,
+  "scripts": {
+    "build": "node scripts/build-www.js",
+    "sync": "npm run build && npx cap copy",
+    "add:ios": "npx cap add ios",
+    "open:ios": "npx cap open ios",
+    "serve": "python3 -m http.server 8799"
+  },
+  "dependencies": {
+    "@capacitor/core": "^6.1.2",
+    "@capacitor/ios": "^6.1.2"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^6.1.2"
+  }
+}
