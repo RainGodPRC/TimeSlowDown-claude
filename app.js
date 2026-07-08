@@ -36,7 +36,7 @@ const App = (() => {
     const top = el('div', { class: 'topbar' }, [
       el('div', { class: 'topbar__title' }, [document.createTextNode('TimeSlowDown')]),
       el('div', { class: 'topbar__right' }, [
-        el('button', { class: 'btn btn--sm btn--ghost', onclick: () => navigate('settings') }, ['⚙︎']),
+        el('button', { class: 'btn btn--sm btn--ghost', onclick: () => navigate('settings'), 'aria-label': '设置' }, ['⚙︎']),
       ]),
     ]);
     app.appendChild(top);
@@ -84,9 +84,17 @@ const App = (() => {
       else if (k === 'onclick') e.addEventListener('click', attrs[k]);
       else if (k === 'oninput') e.addEventListener('input', attrs[k]);
       else if (k === 'html') e.innerHTML = attrs[k];
-      else if (k.startsWith('data-')) e.setAttribute(k, attrs[k]);
+      else if (k.startsWith('data-') || k.startsWith('aria-')) e.setAttribute(k, attrs[k]);
       else if (k === 'style') e.setAttribute('style', attrs[k]);
       else e[k] = attrs[k];
+    }
+    // a11y：非 button 元素带 onclick → 自动补 role=button + tabindex + 键盘激活（VoiceOver/键盘可达）
+    if (tag !== 'button' && attrs.onclick) {
+      e.setAttribute('role', 'button');
+      e.setAttribute('tabindex', '0');
+      e.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); attrs.onclick(ev); }
+      });
     }
     // 健壮化：children 可为 string / Node / array / null
     const kids = Array.isArray(children) ? children
@@ -907,6 +915,7 @@ const App = (() => {
         el('br'),
         '让走过的时间，长成你的人生。',
         el('div', { class: 'mt-3', style: 'font-size:11px;color:var(--fg-faint);' }, ['M1 Web Demo · 不等同 iOS 生产版本']),
+        el('a', { href: 'privacy.html', target: '_blank', style: 'display:inline-block;margin-top:10px;color:var(--accent);font-size:12px;text-decoration:none;' }, ['隐私政策 · Local-first 零上传 ›']),
       ]),
     ]));
     $('#set-import', view).addEventListener('change', async (e) => {
@@ -1222,6 +1231,8 @@ const App = (() => {
     await TSD.init();
     const path = location.hash.replace('#', '') || 'today';
     render(path);
+    const boot = document.getElementById('boot');
+    if (boot) { boot.classList.add('is-out'); setTimeout(() => boot.remove(), 350); }
   }
 
   return { start, navigate };

@@ -13,12 +13,20 @@
   <link rel="apple-touch-icon" href="icon-192.png">
   <link rel="icon" type="image/png" href="icon-192.png">
   <title>TimeSlowDown · 回访</title>
-  <link rel="stylesheet" href="styles.css?v=7">
+  <link rel="stylesheet" href="styles.css?v=8">
+  <style>
+    #boot{position:fixed;inset:0;background:#0f1014;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;z-index:9999;transition:opacity .35s ease}
+    #boot.is-out{opacity:0;pointer-events:none}
+    #boot .b-mark{font-size:56px;color:#d8c9a0}
+    #boot .b-txt{color:#8a857c;font-size:13px;letter-spacing:1px}
+    @media (prefers-color-scheme: light){ #boot{background:#f7f4ef} #boot .b-mark{color:#8a6f3a} #boot .b-txt{color:#6a655c} }
+  </style>
 </head>
 <body>
+  <div id="boot"><div class="b-mark">⊜</div><div class="b-txt">让走过的时间，长成你的人生</div></div>
   <div id="app" role="main"></div>
-  <script src="data.js?v=7"></script>
-  <script src="app.js?v=7"></script>
+  <script src="data.js?v=8"></script>
+  <script src="app.js?v=8"></script>
   <script>
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('sw.js').catch(() => {});
