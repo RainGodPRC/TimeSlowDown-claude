@@ -300,10 +300,14 @@ const App = (() => {
             statBlock(String(nd.thickCount), '变厚(≥2次)', 'growth'),
             statBlock(String(nd.notRevisitedCount), '未回访', 'mute'),
           ]),
-          el('p', { class: 'muted', style: 'font-size:11px;margin-top:12px;line-height:1.5;' }, [
-            '假设：被回访≥2次的瞬间，三个月后可讲述率显著高于未回访。这是本分支可证伪的北极星，不同于"能否讲出5个瞬间"的整体指标。',
+          disclosure('为什么是这个对照指标？', [
+            el('p', { class: 'muted', style: 'font-size:11px;line-height:1.5;' }, ['假设：被回访≥2次的瞬间，三个月后可讲述率显著高于未回访。这是本分支可证伪的北极星，不同于"能否讲出5个瞬间"的整体指标。']),
           ]),
         ]),
+
+        // 里程碑（非惩罚式成就 · 新用户 hook：进度 + 下一目标）
+        el('div', { class: 'section-title' }, ['里程碑']),
+        milestoneCard(),
 
         // 本周回访过的瞬间
         el('div', { class: 'section-title' }, ['本周回访图谱']),
@@ -408,6 +412,28 @@ const App = (() => {
   }
   function truncate(s, n) { return s.length > n ? s.slice(0, n) + '…' : s; }
 
+  // 里程碑卡（today 上的成就 hook：已解锁进度 + 全图标 + 下一目标提示）
+  function milestoneCard() {
+    const all = TSD.getAchievements();
+    const unlockedN = all.filter(a => a.unlocked).length;
+    const next = all.find(a => !a.unlocked);
+    return el('div', { class: 'card' }, [
+      el('div', { class: 'flex items-center justify-between mb-3' }, [
+        el('div', { class: 'h3' }, ['已解锁 ' + unlockedN + ' / ' + all.length]),
+        el('div', { class: 'muted nums', style: 'font-size:11px;letter-spacing:3px;' }, [all.map(a => a.unlocked ? '●' : '○').join('')]),
+      ]),
+      el('div', { style: 'display:flex;justify-content:space-between;' }, all.map(a =>
+        el('div', { style: 'display:flex;flex-direction:column;align-items:center;flex:1;opacity:' + (a.unlocked ? '1' : '0.32') + ';' }, [
+          el('div', { style: 'font-size:22px;' + (a.unlocked ? 'color:var(--accent);' : '') }, [a.icon]),
+          el('div', { class: 'muted', style: 'font-size:9px;text-align:center;margin-top:4px;line-height:1.2;' }, [a.title]),
+        ])
+      )),
+      next
+        ? el('div', { class: 'muted', style: 'font-size:11px;margin-top:14px;text-align:center;' }, ['下一个 · ', el('strong', { style: 'color:var(--fg);' }, [next.title]), ' — ' + next.desc])
+        : el('div', { class: 'muted', style: 'font-size:11px;margin-top:14px;text-align:center;color:var(--accent);' }, ['✓ 全部解锁 · 时间已被你反复回访变厚']),
+    ]);
+  }
+
   // ============================================================
   // 视图：revisit/:id 回访重温（限时、原声、可追加层叠）
   // ============================================================
@@ -498,7 +524,8 @@ const App = (() => {
         result: '保留用户原话，未改写过去记录',
         localOnly: true,
       });
-      toast('这一层已留住');
+      const neu = TSD.checkAchievements();
+      toast(neu.length ? '这一层留住 · 解锁 ' + neu.map(a => a.title).join('、') : '这一层已留住');
       clearInterval(timerInt);
       navigate('today');
     });
@@ -617,29 +644,32 @@ const App = (() => {
           const det = w => { const v = Math.sin(w * 12.9898) * 43758.5453; return v - Math.floor(v); }; // 确定性伪随机
           for (let i = 0; i < N; i++) {
             const wk = Math.round(i / N * total); // 格 → 生命周（比例，余生可见）
-            const cell = el('div', { class: 'wilderness-cell' });
+            const attrs = { class: 'wilderness-cell' };
             if (wk > lived + 1) {
-              cell.classList.add('wilderness-cell--future');
+              attrs.class += ' wilderness-cell--future';
             } else if (wk >= lived - 1) {
-              cell.classList.add('wilderness-cell--today');
+              attrs.class += ' wilderness-cell--today';
             } else {
               const nearby = mw.filter(o => Math.abs(o.wk - wk) < span)
                 .sort((a, b) => TSD.getRevisitCount(b.m.id) - TSD.getRevisitCount(a.m.id));
               if (nearby.length) {
-                const near = nearby[0]; // 取最厚者，避免相邻 bloom 抢占 thick
+                // 有瞬间的格子：可点击 → 跳这周的记录（el 的 onclick 自动补 role/tabindex/键盘）
+                const near = nearby[0];
                 const t = TSD.thickness(near.m.id);
-                cell.classList.add(t === 'thick' ? 'wilderness-cell--thick' : t === 'bloom' ? 'wilderness-cell--bloom' : 'wilderness-cell--grass');
+                attrs.class += ' wilderness-cell--' + (t === 'thick' ? 'thick' : t === 'bloom' ? 'bloom' : 'grass') + ' wilderness-cell--tap';
+                attrs.onclick = () => navigate('moment/' + near.m.id);
+                attrs['aria-label'] = '查看这周的瞬间：' + ((near.m.when && near.m.when.text) || '某天');
               } else {
-                // 确定性草地 + 近因渐变：近期密/亮，远古稀/淡（记忆隐喻：近的鲜活，远的褪色）
+                // 确定性草地 + 近因渐变：近期密/亮，远古稀/淡（记忆隐喻）
                 const recency = lived > 0 ? wk / lived : 0;
                 const density = 0.30 + recency * 0.35;
                 if (det(wk) < density) {
-                  cell.classList.add('wilderness-cell--grass');
-                  cell.style.opacity = (0.35 + recency * 0.55).toFixed(2);
+                  attrs.class += ' wilderness-cell--grass';
+                  attrs.style = 'opacity:' + (0.35 + recency * 0.55).toFixed(2) + ';';
                 }
               }
             }
-            g.appendChild(cell);
+            g.appendChild(el('div', attrs));
           }
         }, 0);
         return grid;
@@ -676,9 +706,8 @@ const App = (() => {
         ]),
       ]),
 
-      el('div', { class: 'section-title' }, ['完整情绪语法']),
-      el('p', { class: 'muted', style: 'font-size:13px;line-height:1.6;' }, [
-        '晴天、雨天、雾与长夜共同构成完整人生。悲伤不是低质量，平静不是空白。同一时期可以同时存在多种天气。',
+      disclosure('完整情绪语法', [
+        el('p', { class: 'muted', style: 'font-size:13px;line-height:1.6;' }, ['晴天、雨天、雾与长夜共同构成完整人生。悲伤不是低质量，平静不是空白。同一时期可以同时存在多种天气。']),
       ]),
     ]));
   });
@@ -781,8 +810,8 @@ const App = (() => {
         gateRow('隐私门', '检查人物/地点/儿童/健康等敏感内容', '分享前二次确认'),
         gateRow('认领门', '用户永远有最后一句话', '反馈优先级高于模型评分'),
       ]),
-      el('p', { class: 'muted mt-3', style: 'font-size:11px;' }, [
-        '铁律：AI 不改写过去的记忆。回访追加的"现在再看"必须保留用户原话。原始线索 / AI 草稿 / 用户确认版三态分离。',
+      disclosure('AI 铁律（不改写过去）', [
+        el('p', { class: 'muted', style: 'font-size:11px;line-height:1.6;' }, ['回访追加的"现在再看"必须保留用户原话；原始线索 / AI 草稿 / 用户确认版三态分离。AI 只排列，不改写。']),
       ]),
 
       el('div', { class: 'section-title' }, ['移动端 AI 分层 L0–L4']),
@@ -1134,6 +1163,14 @@ const App = (() => {
     sheet(content);
   }
 
+  // 渐进展开（减文字过载）：headline 可见，点开看详情。原生 <details>，免 JS、自带 a11y
+  function disclosure(label, children) {
+    return el('details', { class: 'disclosure' }, [
+      el('summary', { class: 'disclosure__summary' }, [label]),
+      el('div', { class: 'disclosure__body' }, children),
+    ]);
+  }
+
   function downloadJSON(d, name) {
     const blob = new Blob([JSON.stringify(d, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -1242,6 +1279,7 @@ const App = (() => {
   // ---------- 启动 ----------
   async function start() {
     await TSD.init();
+    TSD.checkAchievements(); // 启动静默解锁已达成成就（不在启动时 toast，避免噪音）
     const path = location.hash.replace('#', '') || 'today';
     render(path);
     const boot = document.getElementById('boot');

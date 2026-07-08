@@ -221,6 +221,7 @@ const TSD = (() => {
       aiLog: [], // AI 任务记录
       lastEchoMomentId: null,
       lastEchoDate: null,
+      achievements: {},
     };
   }
   function save() {
@@ -397,6 +398,30 @@ const TSD = (() => {
   }
   function getAiLog() { return state.aiLog.slice(); }
 
+  // ---------- 成就 / 里程碑（非惩罚式 · 回访论点对齐）----------
+  // 守原则5：只靠"做到了什么"解锁，绝不靠"没漏掉"——漏记不损失任何成就，无断签羞辱
+  const ACHIEVEMENTS = [
+    { id: 'first_echo', icon: '⊜', title: '第一次被带回', desc: '完成今天的第一次回声', test: s => s.onboarded },
+    { id: 'first_layer', icon: '✎', title: '时间层叠', desc: '回访时留下第一句"现在再看"', test: s => s.revisits.some(r => r.feeling && r.feeling.trim()) },
+    { id: 'thick', icon: '◈', title: '开始变厚', desc: '有一个瞬间被回访 ≥2 次', test: s => { const c = {}; s.revisits.forEach(r => c[r.momentId] = (c[r.momentId] || 0) + 1); return Object.values(c).some(n => n >= 2); } },
+    { id: 'diverse', icon: '⚯', title: '不困在一个瞬间', desc: '一周内回访 ≥3 个不同瞬间', test: s => { const wk = Date.now() - 7 * 864e5; return new Set(s.revisits.filter(r => r.at >= wk).map(r => r.momentId)).size >= 3; } },
+    { id: 'revisit10', icon: '◯', title: '回访图谱 · 10', desc: '累计回访满 10 次', test: s => s.revisits.length >= 10 },
+    { id: 'revisit30', icon: '◉', title: '回访图谱 · 30', desc: '累计回访满 30 次', test: s => s.revisits.length >= 30 },
+  ];
+  function checkAchievements() {
+    if (!state.achievements) state.achievements = {}; // 迁移：旧 state 无此字段
+    const newly = [];
+    for (const a of ACHIEVEMENTS) {
+      if (!state.achievements[a.id] && a.test(state)) { state.achievements[a.id] = Date.now(); newly.push(a); }
+    }
+    if (newly.length) save();
+    return newly;
+  }
+  function getAchievements() {
+    const u = state.achievements || {};
+    return ACHIEVEMENTS.map(a => ({ id: a.id, icon: a.icon, title: a.title, desc: a.desc, unlocked: !!u[a.id], at: u[a.id] || null }));
+  }
+
   // ---------- 导出 / 清空 ----------
   function exportData() {
     return JSON.parse(JSON.stringify(state));
@@ -511,6 +536,7 @@ const TSD = (() => {
     setOnboarded, setBirthYear, setReviewContext, setNotifications,
     setPrivacyMode, setAiConsent, setSetting, setTier,
     logAiTask, revertAiTask, getAiLog,
+    checkAchievements, getAchievements,
     exportData, clearAll, lifeWeeks,
     makePackage, importPackage, applyImport,
     softDelete, hasTombstone, restoreTombstone, clearTombstone,
