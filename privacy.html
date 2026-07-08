@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>隐私政策 · TimeSlowDown 回访</title>
+<meta name="theme-color" content="#0f1014">
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #0f1014; color: #e8e4dc; font: 16px/1.7 -apple-system, "PingFang SC", "Helvetica Neue", sans-serif; }
+  .wrap { max-width: 680px; margin: 0 auto; padding: 48px 24px 80px; }
+  h1 { font-size: 28px; margin: 0 0 4px; letter-spacing: .5px; }
+  .sub { color: #8a857c; font-size: 13px; margin-bottom: 32px; }
+  h2 { font-size: 18px; margin: 32px 0 8px; color: #d8c9a0; }
+  p, li { color: #c8c3ba; }
+  a { color: #d8c9a0; }
+  .pill { display: inline-block; background: rgba(216,201,160,.12); color: #d8c9a0; padding: 4px 12px; border-radius: 999px; font-size: 12px; margin-bottom: 24px; }
+  .footer { margin-top: 48px; padding-top: 24px; border-top: 1px solid #2a2b30; font-size: 12px; color: #6a655c; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <span class="pill">Local-first · 零上传</span>
+  <h1>隐私政策</h1>
+  <div class="sub">TimeSlowDown · 回访分支 · 最近更新：2026-07-08</div>
+
+  <p>TimeSlowDown（以下简称"TSD"）的回访分支是一款帮你"回到过去某个瞬间"的记忆 app。我们对你的记忆数据采取最严格的保护：本机优先，不上传。</p>
+
+  <h2>1. 我们收集什么</h2>
+  <p>我们<strong>不收集</strong>你的任何个人数据到我们的服务器。具体而言：</p>
+  <ul>
+    <li>你记录的瞬间文本、选择的影像、回访时追加的"现在再看"感受——<strong>全部仅存储在你的设备本机</strong>（浏览器/应用的 IndexedDB 本地数据库）。</li>
+    <li>没有账户系统、没有登录、没有手机号或邮箱。</li>
+    <li>没有第三方统计分析 SDK、没有广告 SDK、没有任何跨应用或跨网站追踪。</li>
+  </ul>
+
+  <h2>2. 数据存在哪里</h2>
+  <ul>
+    <li>全部记忆数据存在<strong>你的设备本机</strong>。</li>
+    <li>本 app 不向任何服务器发送你的瞬间内容或影像。</li>
+    <li>导出/分享是你主动的操作——只有你点击"导出记忆包"或"复制分享文案"时，数据才会离开 app，且去向由你决定。</li>
+  </ul>
+
+  <h2>3. 你的权利</h2>
+  <ul>
+    <li><strong>导出</strong>：随时在"设置 → 记忆保险箱 → 导出记忆包"导出完整、带完整性校验的 JSON 记忆包。</li>
+    <li><strong>删除</strong>：随时清空本机数据，app 会生成删除回执并保留会话内撤销窗口。</li>
+    <li><strong>可理解</strong>：所有 AI 任务可在"AI 任务账本"查看与撤销；AI 永不改写你过去的原话。</li>
+  </ul>
+
+  <h2>4. 权限说明</h2>
+  <ul>
+    <li><strong>照片库 / 相机</strong>：仅在你主动选择"选一张照片"作为回访入口时使用，影像仅存本机，不上传。</li>
+    <li>除此之外，本 app 不请求定位、通讯录、麦克风、健康等任何其他权限。</li>
+  </ul>
+
+  <h2>5. 加密与合规</h2>
+  <p>本 app 不包含自定义加密；仅使用系统标准 HTTPS 传输（适用于 Apple 加密出口合规的豁免类别）。儿童与家庭影像建议在家庭/本地保险箱场景单独管理。</p>
+
+  <h2>6. 联系</h2>
+  <p>如对本政策有疑问，可在 GitHub 仓库 <a href="https://github.com/RainGodPRC/TimeSlowDown-claude">RainGodPRC/TimeSlowDown-claude</a> 提 issue。</p>
+
+  <div class="footer">
+    本政策适用于 TSD 回访分支（Claude Code 分支）的所有版本。若未来引入云端同步/E2EE 等可选能力，将在此提前更新并征求同意。
+  </div>
+</div>
+</body>
+</html>
