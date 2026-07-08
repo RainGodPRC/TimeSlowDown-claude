@@ -1,0 +1,61 @@
+# TSD 回访 fastlane 流水线
+# ==========================================================================
+# 前置（用户一次性，需 Xcode + 你的 Apple ID）：
+#   1. 装完整 Xcode + `sudo xcode-select -s /Applications/Xcode.app/Contents/Developer`
+#   2. Xcode → Settings → Accounts 登录你的 Apple ID
+#   3. `cap open ios` → App target → Signing & Capabilities 选你的 Team
+#   4. （首次上架）developer.apple.com 注册 Apple Developer（$99/年）
+#
+# 一口气 Archive + 上传 TestFlight：  TSD_APPLE_ID=你@apple.com fastlane beta
+# ==========================================================================
+
+default_platform(:ios)
+
+IOS_APP_ID = "com.raingodprc.tsdrevisit"
+IOS_WORKSPACE = "ios/App/App.xcworkspace" # Capacitor 生成（含 Pods）
+IOS_SCHEME = "App"
+
+platform :ios do
+  desc "同步 web 资产（www/）与 CocoaPods"
+  lane :sync do
+    sh("npm run build")        # web 资产 → www/（原生构建剥离 SW）
+    sh("npx cap copy ios")     # www/ → ios/App/App/public
+    sh("cd ios/App && pod install")
+  end
+
+  desc "Archive 并上传 TestFlight（需 Xcode + signing team 已配置）"
+  lane :beta do
+    sync
+    build_app(
+      workspace: IOS_WORKSPACE,
+      scheme: IOS_SCHEME,
+      export_method: "app-store",
+      # 自动签名：依赖 Xcode 里配置的 team。CI 环境可改 match(scheme)。
+      include_bitcode: false,
+      xcargs: "MARKETING_VERSION=1.0 CURRENT_PROJECT_VERSION=1"
+    )
+    upload_to_testflight(
+      app_identifier: IOS_APP_ID,
+      skip_waiting_for_build_processing: true
+    )
+    puts("✓ TestFlight 上传完成。App Store Connect → TestFlight 查看构建。")
+  end
+
+  desc "生成 App Store 截图（需先在 Xcode 加 UI Test target，见 Snapfile）"
+  lane :screenshots do
+    capture_screenshots(workspace: IOS_WORKSPACE, scheme: "TimeSlowDownUITests")
+  end
+
+  desc "上传元数据 + 截图到 App Store Connect（不自动提交审核——法律动作留给你按）"
+  lane :metadata do
+    deliver(
+      app_identifier: IOS_APP_ID,
+      metadata_path: "fastlane/metadata",
+      screenshots_path: "fastlane/screenshots",
+      submit_for_review: false,   # 提交审核是你与 Apple 的法律契约，必须你亲自按
+      automatic_release: false,
+      precheck_include_in_app_purchases: false
+    )
+    puts("✓ 元数据+截图已上传。App Store Connect → 审核 → 手动提交。")
+  end
+end

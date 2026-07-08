@@ -1,0 +1,28 @@
+# TSD 回访 App Store 截图规格
+# ==========================================================================
+# 前置（一次性，需 Xcode）：
+#   Xcode → File → New → Target → UI Testing Bundle → 命名 "TimeSlowDownUITests"
+#   把生成的 TimeSlowDownUITests.swift 内容替换为快照驱动（启动→切 hash 路由→capture）。
+#   fastlane 会自动注入 SnapshotHelper。
+#
+#   截图计划（5 张，App Store 必需；最多 10）：
+#     1. #today   今天的回声（主交付：被带回的旧瞬间）
+#     2. #revisit 10 秒限时重温（原则9 不沉迷的可视证据）
+#     3. #wilderness 人生周格旷野（变厚/花丛/草地）
+#     4. #media   影像回访入口 + 人物镜头
+#     5. #settings 账户权利中心 / 隐私（local-first 主张）
+# ==========================================================================
+
+devices([
+  "iPhone 15 Pro Max",               # 6.9"/6.7" 主展示
+  "iPhone SE (3rd generation)",      # 4.7" 小屏（Apple 必填）
+])
+languages([
+  "zh-Hans",  # 首发主力
+  "en-US",    # 全球
+])
+scheme("TimeSlowDownUITests")
+output_directory("./fastlane/screenshots")
+clear_previous_screenshots(true)
+reinstall_app(true)
+# demo 模式：种子数据让每屏都有内容（app 已内置 SEED_MOMENTS）

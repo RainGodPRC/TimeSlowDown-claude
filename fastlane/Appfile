@@ -1,0 +1,5 @@
+# TSD 回访 fastlane 配置
+app_identifier("com.raingodprc.tsdrevisit") # 已在 capacitor.config.ts / Info.plist
+# 你的 Apple ID 与 Team 用环境变量传，避免入库（在 shell 设：export TSD_APPLE_ID=...）
+apple_id(ENV["TSD_APPLE_ID"])
+itc_team_id(ENV["TSD_TEAM_ID"]) # App Store Connect team id（可选，多 team 时必填）
