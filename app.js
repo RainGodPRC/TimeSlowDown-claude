@@ -603,27 +603,40 @@ const App = (() => {
         setTimeout(() => {
           const g = $('#wild-grid');
           if (!g) return;
-          const cols = 13, rows = 40;
-          for (let i = 0; i < cols * rows; i++) {
-            const weekIdx = Math.floor(i / cols) + (i % cols) * rows; // 重排
+          const N = 13 * 40;             // 520 视觉格
+          const total = life.total;       // 4680 周（90 年）
+          const lived = life.lived;
+          const weekMs = 7 * 86400000;
+          const birthMs = Date.now() - lived * weekMs; // 反推出生时刻
+          // 预映射瞬间到"生命周"（出生=0，现在=lived，终=total）
+          const mw = moments
+            .filter(m => m.when && m.when.start)
+            .map(m => ({ m, wk: Math.round((m.when.start * 1000 - birthMs) / weekMs) }))
+            .filter(o => o.wk >= 0 && o.wk <= total);
+          const span = Math.max(1, Math.ceil(total / N)); // 每格 ≈9 周
+          const det = w => { const v = Math.sin(w * 12.9898) * 43758.5453; return v - Math.floor(v); }; // 确定性伪随机
+          for (let i = 0; i < N; i++) {
+            const wk = Math.round(i / N * total); // 格 → 生命周（比例，余生可见）
             const cell = el('div', { class: 'wilderness-cell' });
-            if (weekIdx > lived) cell.classList.add('wilderness-cell--future');
-            else if (weekIdx === lived) cell.classList.add('wilderness-cell--today');
-            else {
-              // 看这一周附近有没有瞬间，及回访厚度
-              const near = moments.find(m => {
-                if (!m.when || !m.when.start) return false;
-                const mweek = Math.floor(m.when.start / (86400 * 7));
-                return Math.abs(mweek - weekIdx) < 2;
-              });
-              if (near) {
-                const t = TSD.thickness(near.id);
-                if (t === 'thick') cell.classList.add('wilderness-cell--thick');
-                else if (t === 'bloom') cell.classList.add('wilderness-cell--bloom');
-                else cell.classList.add('wilderness-cell--grass');
+            if (wk > lived + 1) {
+              cell.classList.add('wilderness-cell--future');
+            } else if (wk >= lived - 1) {
+              cell.classList.add('wilderness-cell--today');
+            } else {
+              const nearby = mw.filter(o => Math.abs(o.wk - wk) < span)
+                .sort((a, b) => TSD.getRevisitCount(b.m.id) - TSD.getRevisitCount(a.m.id));
+              if (nearby.length) {
+                const near = nearby[0]; // 取最厚者，避免相邻 bloom 抢占 thick
+                const t = TSD.thickness(near.m.id);
+                cell.classList.add(t === 'thick' ? 'wilderness-cell--thick' : t === 'bloom' ? 'wilderness-cell--bloom' : 'wilderness-cell--grass');
               } else {
-                // 随机草地
-                if (weekIdx < lived - 2 && Math.random() > 0.6) cell.classList.add('wilderness-cell--grass');
+                // 确定性草地 + 近因渐变：近期密/亮，远古稀/淡（记忆隐喻：近的鲜活，远的褪色）
+                const recency = lived > 0 ? wk / lived : 0;
+                const density = 0.30 + recency * 0.35;
+                if (det(wk) < density) {
+                  cell.classList.add('wilderness-cell--grass');
+                  cell.style.opacity = (0.35 + recency * 0.55).toFixed(2);
+                }
               }
             }
             g.appendChild(cell);
