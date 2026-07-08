@@ -669,3 +669,11 @@ ul, ol { list-style: none; }
 .disclosure__summary::after { content: '＋'; color: var(--fg-faint); font-size: 14px; }
 .disclosure[open] .disclosure__summary::after { content: '－'; }
 .disclosure__body { padding: 0 14px 12px; color: var(--fg-mute); font-size: 12px; line-height: 1.6; }
+
+/* 峰终仪式（会话收尾微动画 · 峰终定律） */
+.ritual { position: fixed; inset: 0; background: rgba(8,8,12,.86); backdrop-filter: blur(6px); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; z-index: 10000; opacity: 0; transition: opacity .32s var(--ease); }
+.ritual.is-in { opacity: 1; }
+.ritual__mark { font-size: 64px; color: var(--accent); transform: scale(.6); transition: transform .5s var(--ease); }
+.ritual.is-in .ritual__mark { transform: scale(1); }
+.ritual__text { font-size: 22px; color: var(--fg); }
+.ritual__sub { font-size: 13px; }

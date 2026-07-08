@@ -528,10 +528,9 @@ const App = (() => {
       });
       const neu = TSD.checkAchievements();
       const qm = TSD.raw().settings && TSD.raw().settings.quietMode;
-      toast(neu.length && !qm ? '这一层留住 · 浮现印记：' + neu.map(a => a.title).join('、') : '这一层已留住');
       haptic(neu.length && !qm ? 'success' : 'impact');
       clearInterval(timerInt);
-      navigate('today');
+      peakEndRitual('这一层留住了', neu.length && !qm ? '又浮现一枚印记' : '被带回的这一刻，又厚了一层', () => navigate('today'));
     });
   });
 
@@ -1266,6 +1265,21 @@ const App = (() => {
     } catch (e) {}
   }
 
+  // 峰终仪式（沉浸锚点 · 峰终定律）：会话结尾 1.1s 微仪式，满足性终止、送人离开（守原则9）
+  function peakEndRitual(text, sub, done) {
+    const overlay = el('div', { class: 'ritual' }, [
+      el('div', { class: 'ritual__mark' }, ['◈']),
+      el('div', { class: 'ritual__text serif' }, [text]),
+      sub ? el('div', { class: 'ritual__sub muted' }, [sub]) : null,
+    ]);
+    document.body.appendChild(overlay);
+    requestAnimationFrame(() => overlay.classList.add('is-in'));
+    setTimeout(() => {
+      overlay.classList.remove('is-in');
+      setTimeout(() => { overlay.remove(); done && done(); }, 320);
+    }, 1100);
+  }
+
   // 渐进展开（减文字过载）：headline 可见，点开看详情。原生 <details>，免 JS、自带 a11y
   function disclosure(label, children) {
     return el('details', { class: 'disclosure' }, [
@@ -1383,6 +1397,7 @@ const App = (() => {
   async function start() {
     await TSD.init();
     TSD.checkAchievements(); // 启动静默解锁已达成成就（不在启动时 toast，避免噪音）
+    haptic('impact'); // 入场触觉（D-B1）：建立"进入仪式空间"的条件反射（native 生效，web 静默）
     const path = location.hash.replace('#', '') || 'today';
     render(path);
     const boot = document.getElementById('boot');
