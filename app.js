@@ -68,7 +68,7 @@ const App = (() => {
     return el('nav', { class: 'tabbar' }, tabs.map(t =>
       el('button', {
         class: 'tabbar__btn' + (active === t.id ? ' is-active' : ''),
-        onclick: () => navigate(t.id),
+        onclick: () => { haptic('impact'); navigate(t.id); },
       }, [
         el('span', { class: 'tabbar__icon' }, [t.icon]),
         el('span', { class: 'tabbar__label' }, [t.label]),
@@ -529,6 +529,7 @@ const App = (() => {
       const neu = TSD.checkAchievements();
       const qm = TSD.raw().settings && TSD.raw().settings.quietMode;
       toast(neu.length && !qm ? '这一层留住 · 浮现印记：' + neu.map(a => a.title).join('、') : '这一层已留住');
+      haptic(neu.length && !qm ? 'success' : 'impact');
       clearInterval(timerInt);
       navigate('today');
     });
@@ -1252,6 +1253,17 @@ const App = (() => {
       el('p', { class: 'muted', style: 'font-size:12px;' }, ['当前 Demo：不调真实 API、不请求相册/定位权限、无真实账户系统、无 E2EE 文件库。所有数据仅本地。']),
     ]);
     sheet(content);
+  }
+
+  // iOS 触觉反馈（沉浸锚点）：native 下 Capacitor 注入 Haptics，web 静默降级
+  function haptic(kind) {
+    try {
+      const H = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Haptics;
+      if (!H) return;
+      if (kind === 'success') H.notification({ type: 'SUCCESS' });
+      else if (kind === 'warning') H.notification({ type: 'WARNING' });
+      else H.impact({ style: 'LIGHT' });
+    } catch (e) {}
   }
 
   // 渐进展开（减文字过载）：headline 可见，点开看详情。原生 <details>，免 JS、自带 a11y
