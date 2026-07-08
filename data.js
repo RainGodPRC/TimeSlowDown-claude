@@ -407,6 +407,12 @@ const TSD = (() => {
     { id: 'diverse', icon: '⚯', title: '不困在一个瞬间', desc: '一周内回访 ≥3 个不同瞬间', test: s => { const wk = Date.now() - 7 * 864e5; return new Set(s.revisits.filter(r => r.at >= wk).map(r => r.momentId)).size >= 3; } },
     { id: 'revisit10', icon: '◯', title: '回访图谱 · 10', desc: '累计回访满 10 次', test: s => s.revisits.length >= 10 },
     { id: 'revisit30', icon: '◉', title: '回访图谱 · 30', desc: '累计回访满 30 次', test: s => s.revisits.length >= 30 },
+    { id: 'cross_year', icon: '✦', title: '重逢多年', desc: '回访了一个一年前的旧瞬间', test: s => s.revisits.some(r => { const m = s.moments.find(x => x.id === r.momentId); return m && m.createdAt && (r.at - m.createdAt) >= 365 * 864e5; }) },
+    { id: 'long_absence', icon: '⌛', title: '久别重逢', desc: '把一个 90 天前的旧瞬间又带回', test: s => s.revisits.some(r => { const m = s.moments.find(x => x.id === r.momentId); return m && m.createdAt && (r.at - m.createdAt) >= 90 * 864e5; }) },
+    { id: 'active_recall', icon: '✿', title: '主动想起', desc: '累计留下 10 句"现在再看"', test: s => s.revisits.filter(r => r.feeling && r.feeling.trim()).length >= 10 },
+    // 人生印记（hidden：解锁前不显示条件，惊喜出现；参 Codex"雾中印记"）
+    { id: 'deep_well', icon: '◉', title: '深井', desc: '有一个瞬间被反复回访 5 次以上', hidden: true, test: s => { const c = {}; s.revisits.forEach(r => c[r.momentId] = (c[r.momentId] || 0) + 1); return Object.values(c).some(n => n >= 5); } },
+    { id: 'centurion', icon: '✶', title: '回访者', desc: '累计回访满 100 次', hidden: true, test: s => s.revisits.length >= 100 },
   ];
   function checkAchievements() {
     if (!state.achievements) state.achievements = {}; // 迁移：旧 state 无此字段
@@ -419,7 +425,7 @@ const TSD = (() => {
   }
   function getAchievements() {
     const u = state.achievements || {};
-    return ACHIEVEMENTS.map(a => ({ id: a.id, icon: a.icon, title: a.title, desc: a.desc, unlocked: !!u[a.id], at: u[a.id] || null }));
+    return ACHIEVEMENTS.map(a => ({ id: a.id, icon: a.icon, title: a.title, desc: a.desc, hidden: !!a.hidden, unlocked: !!u[a.id], at: u[a.id] || null }));
   }
 
   // ---------- 导出 / 清空 ----------

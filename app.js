@@ -305,9 +305,11 @@ const App = (() => {
           ]),
         ]),
 
-        // 里程碑（非惩罚式成就 · 新用户 hook：进度 + 下一目标）
-        el('div', { class: 'section-title' }, ['里程碑']),
-        milestoneCard(),
+        // 重逢印记（Codex 雾中范式：惊喜，非打卡；安静模式时隐藏）
+        ...(TSD.raw().settings && TSD.raw().settings.quietMode ? [] : [
+          el('div', { class: 'section-title' }, ['重逢印记']),
+          milestoneCard(),
+        ]),
 
         // 本周回访过的瞬间
         el('div', { class: 'section-title' }, ['本周回访图谱']),
@@ -412,25 +414,25 @@ const App = (() => {
   }
   function truncate(s, n) { return s.length > n ? s.slice(0, n) + '…' : s; }
 
-  // 里程碑卡（today 上的成就 hook：已解锁进度 + 全图标 + 下一目标提示）
+  // 重逢印记墙（Codex"雾中印记"范式：惊喜出现，不展示 %/锁定清单，永久雾中未知位）
   function milestoneCard() {
-    const all = TSD.getAchievements();
-    const unlockedN = all.filter(a => a.unlocked).length;
-    const next = all.find(a => !a.unlocked);
-    return el('div', { class: 'card' }, [
-      el('div', { class: 'flex items-center justify-between mb-3' }, [
-        el('div', { class: 'h3' }, ['已解锁 ' + unlockedN + ' / ' + all.length]),
-        el('div', { class: 'muted nums', style: 'font-size:11px;letter-spacing:3px;' }, [all.map(a => a.unlocked ? '●' : '○').join('')]),
+    const unlocked = TSD.getAchievements().filter(a => a.unlocked);
+    return el('div', { class: 'card', onclick: () => navigate('imprints'), 'aria-label': '查看全部重逢印记' }, [
+      el('div', { class: 'section-title', style: 'margin:0 0 12px;' }, ['重逢印记']),
+      el('div', { style: 'display:flex;flex-wrap:wrap;gap:14px;align-items:flex-start;' }, [
+        ...unlocked.map(a => imprintTile(a, false)),
+        el('div', { style: 'display:flex;flex-direction:column;align-items:center;width:52px;opacity:.5;' }, [
+          el('div', { style: 'font-size:22px;color:var(--fg-faint);' }, ['?']),
+          el('div', { class: 'muted', style: 'font-size:9px;text-align:center;margin-top:4px;line-height:1.2;' }, ['雾中']),
+        ]),
       ]),
-      el('div', { style: 'display:flex;justify-content:space-between;' }, all.map(a =>
-        el('div', { style: 'display:flex;flex-direction:column;align-items:center;flex:1;opacity:' + (a.unlocked ? '1' : '0.32') + ';' }, [
-          el('div', { style: 'font-size:22px;' + (a.unlocked ? 'color:var(--accent);' : '') }, [a.icon]),
-          el('div', { class: 'muted', style: 'font-size:9px;text-align:center;margin-top:4px;line-height:1.2;' }, [a.title]),
-        ])
-      )),
-      next
-        ? el('div', { class: 'muted', style: 'font-size:11px;margin-top:14px;text-align:center;' }, ['下一个 · ', el('strong', { style: 'color:var(--fg);' }, [next.title]), ' — ' + next.desc])
-        : el('div', { class: 'muted', style: 'font-size:11px;margin-top:14px;text-align:center;color:var(--accent);' }, ['✓ 全部解锁 · 时间已被你反复回访变厚']),
+      el('div', { class: 'muted', style: 'font-size:11px;margin-top:14px;text-align:center;' }, ['印记不求全、不打分——重逢本身即奖励 · 点开看全部 ›']),
+    ]);
+  }
+  function imprintTile(a, big) {
+    return el('div', { style: 'display:flex;flex-direction:column;align-items:center;width:' + (big ? '64' : '52') + 'px;', title: a.title + ' · ' + a.desc }, [
+      el('div', { style: 'font-size:' + (big ? '28' : '22') + 'px;color:var(--accent);' }, [a.icon]),
+      el('div', { class: 'muted', style: 'font-size:' + (big ? '10' : '9') + 'px;text-align:center;margin-top:' + (big ? '6' : '4') + 'px;line-height:1.2;' }, [a.title]),
     ]);
   }
 
@@ -525,7 +527,8 @@ const App = (() => {
         localOnly: true,
       });
       const neu = TSD.checkAchievements();
-      toast(neu.length ? '这一层留住 · 解锁 ' + neu.map(a => a.title).join('、') : '这一层已留住');
+      const qm = TSD.raw().settings && TSD.raw().settings.quietMode;
+      toast(neu.length && !qm ? '这一层留住 · 浮现印记：' + neu.map(a => a.title).join('、') : '这一层已留住');
       clearInterval(timerInt);
       navigate('today');
     });
@@ -1109,6 +1112,50 @@ const App = (() => {
         toast('已选影像（已压缩为本地存储）');
       } catch (err) { toast(err.message || '影像处理失败'); }
     });
+  });
+
+  // ============================================================
+  // 视图：imprints 重逢印记（独立页 · Codex 雾中范式 + 安静模式开关）
+  // ============================================================
+  route('imprints', ({ view, navigate }) => {
+    const unlocked = TSD.getAchievements().filter(a => a.unlocked);
+    view.appendChild(el('div', {}, [
+      el('div', { class: 'flex items-center justify-between mb-4' }, [
+        el('button', { class: 'btn btn--sm btn--ghost', onclick: () => history.back() }, ['‹ 返回']),
+      ]),
+      el('h2', { class: 'h2 mb-2' }, ['重逢印记']),
+      el('p', { class: 'muted mb-5', style: 'font-size:13px;line-height:1.6;' }, [
+        '印记不是任务清单——不打分、不求全、不展示还差几个。它们是回访路上偶尔在雾里浮现的惊喜。',
+        el('br'), el('strong', { style: 'color:var(--fg);' }, ['重逢本身，即是奖励。']),
+      ]),
+      el('div', { class: 'card' }, [
+        el('div', { style: 'display:flex;flex-wrap:wrap;gap:18px;align-items:flex-start;' }, [
+          ...(unlocked.length ? unlocked.map(a => imprintTile(a, true)) : [el('div', { class: 'muted', style: 'font-size:13px;' }, ['还没有印记浮现。继续回访，它们会在雾里慢慢出现。'])]),
+          // 永久雾中未知位
+          el('div', { style: 'display:flex;flex-direction:column;align-items:center;width:64px;opacity:.45;' }, [
+            el('div', { style: 'font-size:28px;color:var(--fg-faint);' }, ['?']),
+            el('div', { class: 'muted', style: 'font-size:10px;text-align:center;margin-top:6px;line-height:1.2;' }, ['雾中']),
+            el('div', { class: 'muted', style: 'font-size:9px;text-align:center;margin-top:2px;color:var(--fg-faint);' }, ['下一枚仍在生活的雾里']),
+          ]),
+        ]),
+      ]),
+      disclosure('印记怎么运作？', [
+        el('p', { class: 'muted', style: 'font-size:12px;line-height:1.7;' }, [
+          '· 印记在达成时惊喜出现，不预告条件、不展示"还差几个"。', el('br'),
+          '· 不设限时活动、节日绝版、付费专属印记或排行榜。', el('br'),
+          '· 漏记永远不会失去印记——印记只奖"做到了"，从不罚"漏掉了"。', el('br'),
+          '· 若你不喜欢被追踪，用下方"安静模式"一键隐藏全部。',
+        ]),
+      ]),
+      el('div', { class: 'section-title' }, ['安静模式']),
+      el('div', { class: 'card' }, [
+        el('div', { class: 'setting-row' }, [
+          el('div', { class: 'setting-row__main' }, [el('div', { class: 'setting-row__title' }, ['安静模式']), el('div', { class: 'setting-row__sub' }, ['隐藏全部印记与进度，适合不喜欢被追踪的你（Stoic 式可关）'])]),
+          el('button', { class: 'switch' + ((TSD.raw().settings && TSD.raw().settings.quietMode) ? ' is-on' : ''), onclick: () => { TSD.setSetting('quietMode', !(TSD.raw().settings && TSD.raw().settings.quietMode)); navigate('imprints'); } }, []),
+        ]),
+      ]),
+      el('p', { class: 'muted mt-4', style: 'font-size:11px;text-align:center;' }, ['印记设计参 Codex"雾中印记"+ Self 型可变奖励心理学；守原则5（无羞辱）与原则9（不争夺屏幕时间）。']),
+    ]));
   });
 
   // ---------- 分享 sheet ----------
