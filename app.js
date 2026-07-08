@@ -161,6 +161,7 @@ const App = (() => {
   // ============================================================
   route('onboarding', ({ view, navigate }) => {
     let step = 0;
+    let userSeedId = null; // D-A1：用户自造的首个瞬间（让回访演示用自己的内容，自造正峰）
     const steps = [
       // 0: 承诺
       () => el('div', { class: 'text-center', style: 'padding-top:20vh;' }, [
@@ -176,9 +177,23 @@ const App = (() => {
         ]),
         el('button', { class: 'btn btn--primary btn--lg btn--block', onclick: next }, ['开始第一次回访']),
       ]),
-      // 1: 第一次回声体验（用种子）
+      // 1: 自造第一个瞬间（D-A1：60 秒内自造正峰，让回访演示用用户自己的内容）
+      () => el('div', { class: 'text-center', style: 'padding-top:10vh;' }, [
+        el('h2', { class: 'h2 mb-3' }, ['留一句今天的小事']),
+        el('p', { class: 'muted mb-5', style: 'font-size:13px;' }, ['一个词就够——它会成为你第一个能被"带回"的瞬间。']),
+        el('textarea', { id: 'onboard-seed', placeholder: '比如：今天阳光很好，在阳台站了一会儿。', style: 'width:100%;min-height:90px;padding:14px;background:var(--bg-elev);border:1px solid var(--line-strong);border-radius:14px;font-size:15px;font-family:var(--font-serif);resize:none;' }),
+        el('div', { class: 'flex gap-3 mt-4' }, [
+          el('button', { class: 'btn btn--ghost btn--lg', style: 'flex:1', onclick: () => next() }, ['跳过']),
+          el('button', { class: 'btn btn--primary btn--lg', style: 'flex:1', onclick: () => {
+            const t = ($('#onboard-seed') ? $('#onboard-seed').value : '').trim();
+            if (t) { const mm = TSD.addMoment({ quote: t, kind: 'grass', people: [], when: { precision: 'day', text: '今天', start: Math.floor(Date.now() / 1000) } }); userSeedId = mm.id; haptic('success'); }
+            next();
+          } }, ['留住']),
+        ]),
+      ]),
+      // 2: 第一次回声体验（优先用用户自造的瞬间，否则种子）
       () => {
-        const m = TSD.SEED_MOMENTS[2]; // 爸爸吃面
+        const m = (userSeedId && TSD.getMoment(userSeedId)) || TSD.SEED_MOMENTS[2];
         return el('div', { class: 'text-center' }, [
           el('div', { class: 'section-title', style: 'margin-top:8vh;' }, ['今天的回声']),
           echoCard(m, { navigate, ctaText: '停留一下', ctaAction: next }),
