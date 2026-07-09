@@ -222,6 +222,7 @@ const TSD = (() => {
       lastEchoMomentId: null,
       lastEchoDate: null,
       achievements: {},
+      capsules: [], // 时间胶囊：封存给未来的自己（C-A 病毒引擎）
     };
   }
   function save() {
@@ -428,6 +429,21 @@ const TSD = (() => {
     return ACHIEVEMENTS.map(a => ({ id: a.id, icon: a.icon, title: a.title, desc: a.desc, hidden: !!a.hidden, unlocked: !!u[a.id], at: u[a.id] || null }));
   }
 
+  // ---------- 时间胶囊（封存给未来的自己 · C-A 病毒引擎）----------
+  function addCapsule(data) {
+    if (!state.capsules) state.capsules = [];
+    const c = Object.assign({ id: 'cap-' + Date.now(), quote: '', momentId: null, unlockAt: Date.now() + 365 * 864e5, createdAt: Date.now(), unlocked: false, viewed: false }, data);
+    state.capsules.unshift(c); save(); return c;
+  }
+  function getCapsules() { return (state.capsules || []).slice(); }
+  function checkCapsuleUnlocks() {
+    const now = Date.now(); const newly = [];
+    (state.capsules || (state.capsules = [])).forEach(c => { if (!c.unlocked && c.unlockAt <= now) { c.unlocked = true; newly.push(c); } });
+    if (newly.length) save();
+    return newly;
+  }
+  function markCapsuleViewed(id) { const c = (state.capsules || []).find(x => x.id === id); if (c && !c.viewed) { c.viewed = true; save(); } }
+
   // ---------- 导出 / 清空 ----------
   function exportData() {
     return JSON.parse(JSON.stringify(state));
@@ -543,6 +559,7 @@ const TSD = (() => {
     setPrivacyMode, setAiConsent, setSetting, setTier,
     logAiTask, revertAiTask, getAiLog,
     checkAchievements, getAchievements,
+    addCapsule, getCapsules, checkCapsuleUnlocks, markCapsuleViewed,
     exportData, clearAll, lifeWeeks,
     makePackage, importPackage, applyImport,
     softDelete, hasTombstone, restoreTombstone, clearTombstone,

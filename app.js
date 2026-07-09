@@ -591,6 +591,7 @@ const App = (() => {
       el('button', { class: 'btn btn--primary btn--lg btn--block mt-5', onclick: () => navigate('revisit/' + id) }, ['再回访一次']),
       el('input', { type: 'file', accept: 'image/*', id: 'moment-photo', style: 'display:none;' }),
       el('button', { class: 'btn btn--ghost btn--block mt-3', onclick: () => $('#moment-photo', view).click() }, [m.media ? '换一张影像' : '补一张影像（作回访入口）']),
+      el('button', { class: 'btn btn--ghost btn--block mt-3', onclick: () => openSealSheet(m) }, ['封存给未来的自己 ✉']),
       el('button', { class: 'btn btn--ghost btn--block mt-3', onclick: () => openShareSheet(m, revs, navigate) }, ['分享这一刻']),
     ]));
     $('#moment-photo', view).addEventListener('change', async (e) => {
@@ -968,6 +969,11 @@ const App = (() => {
         el('div', { class: 'setting-row', onclick: () => navigate('qa') }, [el('div', { class: 'setting-row__main' }, [el('div', { class: 'setting-row__title' }, ['Demo QA Console']), el('div', { class: 'setting-row__sub' }, ['PASS/POC/TODO 计分与验收路线'])]), el('div', { class: 'list-row__right' }, ['▸'])]),
       ]),
 
+      el('div', { class: 'section-title' }, ['未来的信']),
+      el('div', { class: 'card' }, [
+        el('div', { class: 'setting-row', onclick: () => navigate('capsules') }, [el('div', { class: 'setting-row__main' }, [el('div', { class: 'setting-row__title' }, ['时间胶囊']), el('div', { class: 'setting-row__sub' }, ['封存给未来的自己 · ' + TSD.getCapsules().length + ' 封'])]), el('div', { class: 'list-row__right' }, ['▸'])]),
+      ]),
+
       el('div', { class: 'section-title' }, ['关于']),
       el('div', { class: 'card text-center muted', style: 'font-size:12px;line-height:1.6;' }, [
         el('div', { class: 'serif', style: 'font-size:16px;color:var(--fg);margin-bottom:8px;' }, ['TimeSlowDown · Claude Code 分支']),
@@ -1170,6 +1176,61 @@ const App = (() => {
         ]),
       ]),
       el('p', { class: 'muted mt-4', style: 'font-size:11px;text-align:center;' }, ['印记设计参 Codex"雾中印记"+ Self 型可变奖励心理学；守原则5（无羞辱）与原则9（不争夺屏幕时间）。']),
+    ]));
+  });
+
+  // ---------- 时间胶囊：封存给未来的自己（C-A 病毒引擎）----------
+  function openSealSheet(m) {
+    const opts = [['1m', '1 个月', 30], ['3m', '3 个月', 90], ['1y', '1 年', 365], ['3y', '3 年', 1095], ['5y', '5 年', 1825]];
+    const content = el('div', {}, [
+      el('h3', { class: 'h3 mb-3' }, ['封存给未来的自己']),
+      el('p', { class: 'muted mb-4', style: 'font-size:13px;line-height:1.6;' }, ['这一刻会被锁起来，到解锁日才重现——像一封寄给未来自己的信。']),
+      el('div', { class: 'serif', style: 'font-size:15px;color:var(--fg);background:var(--bg-elev);padding:14px;border-radius:12px;margin-bottom:16px;line-height:1.5;' }, ['"' + m.quote + '"']),
+      el('div', { class: 'section-title' }, ['什么时候解锁？']),
+      el('div', { class: 'flex', style: 'flex-wrap:wrap;gap:8px;' }, opts.map(([k, label, days]) =>
+        el('button', { class: 'chip', onclick: (e) => {
+          const unlockAt = Date.now() + days * 864e5;
+          TSD.addCapsule({ quote: m.quote, momentId: m.id, unlockAt });
+          haptic('success');
+          toast('已封存 · ' + new Date(unlockAt).toLocaleDateString('zh-CN') + ' 解锁');
+          const s = e.target.closest('.sheet'); if (s && s._close) s._close();
+        } }, [label])
+      )),
+      el('p', { class: 'muted mt-4', style: 'font-size:11px;line-height:1.5;' }, ['解锁那天的"重逢"会是 TSD 最强的瞬间之一——你大概会想把它分享出去。']),
+    ]);
+    sheet(content);
+  }
+
+  // ============================================================
+  // 视图：capsules 未来的信（时间胶囊列表）
+  // ============================================================
+  route('capsules', ({ view, navigate }) => {
+    const caps = TSD.getCapsules();
+    const now = Date.now();
+    view.appendChild(el('div', {}, [
+      el('div', { class: 'flex items-center justify-between mb-4' }, [
+        el('button', { class: 'btn btn--sm btn--ghost', onclick: () => history.back() }, ['‹ 返回']),
+      ]),
+      el('h2', { class: 'h2 mb-2' }, ['未来的信']),
+      el('p', { class: 'muted mb-5', style: 'font-size:13px;line-height:1.6;' }, ['封存给未来自己的信。到解锁日才会重现——不催、不等、不比较。']),
+      caps.length ? el('div', {}, caps.map(c => {
+        if (c.unlocked) {
+          TSD.markCapsuleViewed(c.id);
+          return el('div', { class: 'card mb-3', style: 'border:1px solid var(--accent-glow, rgba(216,201,160,.3));' }, [
+            el('div', { class: 'echo-card__label' }, ['已解锁 · ' + new Date(c.unlockAt).toLocaleDateString('zh-CN')]),
+            el('div', { class: 'serif', style: 'font-size:17px;line-height:1.5;margin:10px 0;color:var(--fg);' }, ['"' + c.quote + '"']),
+            el('div', { class: 'muted', style: 'font-size:11px;' }, ['封存于 ' + fmtRelative(c.createdAt)]),
+            el('button', { class: 'btn btn--ghost btn--sm mt-3', onclick: () => shareRevisitCard({ quote: c.quote, when: { text: '封存于 ' + fmtRelative(c.createdAt), start: Math.floor(c.createdAt / 1000) } }, []) }, ['分享这一封信']),
+          ]);
+        }
+        const days = Math.ceil((c.unlockAt - now) / 864e5);
+        return el('div', { class: 'card mb-3', style: 'opacity:.72;' }, [
+          el('div', { style: 'font-size:24px;' }, ['🔒']),
+          el('div', { class: 'muted', style: 'font-size:13px;margin-top:8px;' }, ['将在 ' + new Date(c.unlockAt).toLocaleDateString('zh-CN') + ' 解锁（约 ' + days + ' 天后）']),
+          el('div', { class: 'muted', style: 'font-size:11px;margin-top:6px;' }, ['内容暂不可见——让未来的你有一个惊喜。']),
+        ]);
+      })) : el('div', { class: 'card text-center muted', style: 'font-size:13px;' }, ['还没有封存任何信。打开一个瞬间，"封存给未来的自己"。']),
+      el('p', { class: 'muted mt-5', style: 'font-size:11px;text-align:center;' }, ['参 FutureMe；解锁瞬间是 TSD 最强的"重逢"——也是你最想分享的时刻。']),
     ]));
   });
 
@@ -1413,10 +1474,13 @@ const App = (() => {
     await TSD.init();
     TSD.checkAchievements(); // 启动静默解锁已达成成就（不在启动时 toast，避免噪音）
     haptic('impact'); // 入场触觉（D-B1）：建立"进入仪式空间"的条件反射（native 生效，web 静默）
+    const newCaps = TSD.checkCapsuleUnlocks(); // 时间胶囊解锁检查（C-A）
     const path = location.hash.replace('#', '') || 'today';
     render(path);
     const boot = document.getElementById('boot');
-    if (boot) { boot.classList.add('is-out'); setTimeout(() => boot.remove(), 350); }
+    const revealCaps = () => { if (newCaps.length) setTimeout(() => peakEndRitual('一封来自过去的信到了', newCaps.length + ' 封来自过去的你', () => navigate('capsules')), 200); };
+    if (boot) { boot.classList.add('is-out'); setTimeout(() => { boot.remove(); revealCaps(); }, 350); }
+    else revealCaps();
   }
 
   return { start, navigate };
