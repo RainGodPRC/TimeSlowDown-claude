@@ -677,3 +677,26 @@ ul, ol { list-style: none; }
 .ritual.is-in .ritual__mark { transform: scale(1); }
 .ritual__text { font-size: 22px; color: var(--fg); }
 .ritual__sub { font-size: 13px; }
+
+/* 4p "我也是"感受标签微仪式 */
+.feeling-tag-ritual { position: fixed; inset: 0; background: rgba(8,8,12,.9); backdrop-filter: blur(8px); z-index: 10000; opacity: 0; transition: opacity .32s var(--ease); display: flex; align-items: center; justify-content: center; padding: var(--sp-5); overflow-y: auto; }
+.feeling-tag-ritual.is-in { opacity: 1; }
+.feeling-tag-ritual__content { max-width: 400px; width: 100%; max-height: 90vh; overflow-y: auto; padding: var(--sp-6); }
+.feeling-tag__chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: var(--sp-4); }
+.feeling-tag__chip {
+  padding: 6px 14px; border-radius: var(--r-pill);
+  background: var(--bg-elev-2); border: 1px solid var(--line-strong);
+  font-size: 13px; font-family: var(--font-serif); color: var(--fg-soft);
+  transition: background var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease), color var(--dur-fast);
+  cursor: pointer; white-space: nowrap;
+}
+.feeling-tag__chip:active { transform: scale(0.95); }
+.feeling-tag__chip.is-selected { background: var(--accent-glow); border-color: var(--line-accent); color: var(--accent); }
+.feeling-tag__input {
+  width: 100%; padding: var(--sp-3) var(--sp-4);
+  background: var(--bg-elev); border: 1px solid var(--line-strong);
+  border-radius: var(--r-md); font-size: 15px; font-family: var(--font-serif);
+  text-align: center; color: var(--fg); margin-bottom: var(--sp-4);
+}
+.feeling-tag__input::placeholder { color: var(--fg-faint); }
+.feeling-tag__preview { margin-bottom: var(--sp-3); }

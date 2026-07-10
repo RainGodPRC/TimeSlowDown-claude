@@ -262,12 +262,13 @@ const TSD = (() => {
   function getRevisitCount(momentId) {
     return state.revisits.filter(r => r.momentId === momentId).length;
   }
-  function addRevisit(momentId, feeling) {
+  function addRevisit(momentId, feeling, feelingTag) {
     const r = {
       id: 'r-' + Date.now(),
       momentId,
       at: Date.now(),
       feeling: feeling || '',
+      feelingTag: feelingTag || null,
       source: 'user',
     };
     state.revisits.push(r);
@@ -282,6 +283,24 @@ const TSD = (() => {
     if (c === 1) return 'bloom';
     return 'thick';
   }
+
+  // ---------- "我也是"感受标签（4p · 病毒侧锚点C）----------
+  // 预设抽象感受词库：完整短语（非单字），覆盖回访常见情绪光谱
+  // 不按积极/消极排序（守情绪语法原则：晴/雨/雾/长夜共存）
+  const FEELING_TAGS = [
+    '一种轻轻的释然',
+    '安静的力量',
+    '一种说不出的想念',
+    '远远的温暖',
+    '原来已经走了这么远',
+    '那时候不懂',
+    '只是安静地待了一会儿',
+    '什么都没变',
+    '幸好当时留住了',
+    '谢谢那个自己',
+    '一个很小的光',
+    '还记得',
+  ];
 
   // ---------- 开放回路（Zeigarnik · 低频留存锚点）----------
   // 原理：未完的念头制造记忆张力，驱动次日主动回来"续上"——天然同构于回访主轴。
@@ -501,6 +520,10 @@ const TSD = (() => {
     const topTag = Object.entries(tags).sort((a, b) => b[1] - a[1])[0];
     const crossYear = revs.filter(r => { const m = state.moments.find(x => x.id === r.momentId); return m && m.createdAt && (r.at - m.createdAt) >= 365 * 864e5; }).length;
     const earliest = ms.filter(m => m.createdAt).sort((a, b) => a.createdAt - b.createdAt)[0];
+    // 感受标签频率统计（4p · "我也是"）
+    const tagFreq = {};
+    revs.forEach(r => { if (r.feelingTag) tagFreq[r.feelingTag] = (tagFreq[r.feelingTag] || 0) + 1; });
+    const topFeelingTag = Object.entries(tagFreq).sort((a, b) => b[1] - a[1])[0];
     return {
       momentCount: ms.length,
       revisitCount: revs.length,
@@ -510,6 +533,8 @@ const TSD = (() => {
       topTag: topTag ? topTag[0] : null,
       crossYearRevisits: crossYear,
       earliest,
+      topFeelingTag: topFeelingTag ? topFeelingTag[0] : null,
+      topFeelingTagCount: topFeelingTag ? topFeelingTag[1] : 0,
     };
   }
 
@@ -634,6 +659,6 @@ const TSD = (() => {
     exportData, clearAll, lifeWeeks,
     makePackage, importPackage, applyImport,
     softDelete, hasTombstone, restoreTombstone, clearTombstone,
-    SEED_MOMENTS,
+    FEELING_TAGS, SEED_MOMENTS,
   };
 })();

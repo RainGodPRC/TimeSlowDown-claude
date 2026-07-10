@@ -568,7 +568,6 @@ const App = (() => {
 
     $('#save-feeling', view).addEventListener('click', () => {
       const v = $('#feeling-input', view).value.trim();
-      TSD.addRevisit(id, v);
       // 开放回路（Zeigarnik）：勾选"明天再续"且写了字 → 这句未完感受成为明日引子；否则视为续完，关闭回路
       const keepOpen = $('#thread-check', view).checked && v;
       if (keepOpen) TSD.setThread(id, v); else TSD.clearThread(id);
@@ -579,11 +578,17 @@ const App = (() => {
         result: '保留用户原话，未改写过去记录',
         localOnly: true,
       });
-      const neu = TSD.checkAchievements();
-      const qm = TSD.raw().settings && TSD.raw().settings.quietMode;
-      haptic(neu.length && !qm ? 'success' : 'impact');
       clearInterval(timerInt);
-      peakEndRitual('这一层留住了', neu.length && !qm ? '又浮现一枚印记' : '被带回的这一刻，又厚了一层', () => navigate('today'));
+      // 4p "我也是"感受标签：有感受时进入标签微仪式，无感受直接 peakEnd
+      if (v) {
+        feelingTagRitual(id, v, navigate);
+      } else {
+        TSD.addRevisit(id, v);
+        const neu = TSD.checkAchievements();
+        const qm = TSD.raw().settings && TSD.raw().settings.quietMode;
+        haptic(neu.length && !qm ? 'success' : 'impact');
+        peakEndRitual('这一层留住了', neu.length && !qm ? '又浮现一枚印记' : '被带回的这一刻，又厚了一层', () => navigate('today'));
+      }
     });
   });
 
@@ -1316,6 +1321,7 @@ const App = (() => {
       s.thickestQuote ? card('quote', { title: '你最常回到的瞬间', quote: s.thickestQuote, sub: '被回访 ' + s.thickestCount + ' 次', m: { quote: s.thickestQuote, when: { text: '回访 ' + s.thickestCount + ' 次' } } }) : null,
       s.topPerson ? card('stat', { headline: s.topPerson, label: '你反复回到的人', onShare: () => shareStatCard(s.topPerson, '你反复回到的人') }) : null,
       s.earliest ? card('quote', { title: '一切的起点', quote: s.earliest.quote, sub: '最早记录 · ' + fmtRelative(s.earliest.createdAt), m: s.earliest }) : null,
+      s.topFeelingTag ? card('stat', { headline: s.topFeelingTag, label: '你最常回到的感受', onShare: () => shareStatCard(s.topFeelingTag, '你最常回到的感受') }) : null,
       el('p', { class: 'muted mt-5', style: 'font-size:11px;text-align:center;' }, ['反思性怀旧，不是竞争性统计。参 Spotify Wrapped 反 Feed 版；守原则7/9。']),
     ]));
   });
@@ -1528,6 +1534,131 @@ const App = (() => {
       else if (kind === 'warning') H.notification({ type: 'WARNING' });
       else H.impact({ style: 'LIGHT' });
     } catch (e) {}
+  }
+
+  // 4p "我也是"感受标签微仪式（病毒侧锚点C · 最小暴露面分享抽象感受）
+  // 触发：回访追加非空感受后，在 peakEndRitual 前插入可跳过的"给感受起个名字"
+  // 守原则5：完全可选可跳过、不展示完成率；守原则9：不增加会话总时长；守原则7：分享成品非 Feed
+  function feelingTagRitual(momentId, feeling, navigate) {
+    const overlay = el('div', { class: 'feeling-tag-ritual' });
+    const tags = TSD.FEELING_TAGS;
+    let selectedTag = null;
+
+    const tagChips = el('div', { class: 'feeling-tag__chips' }, tags.map(t =>
+      el('button', { class: 'feeling-tag__chip', onclick: (e) => {
+        $$('.feeling-tag__chip', overlay).forEach(c => c.classList.remove('is-selected'));
+        e.target.classList.add('is-selected');
+        selectedTag = t;
+        haptic('impact');
+      } }, [t])
+    ));
+
+    const customInput = el('input', {
+      id: 'feeling-tag-custom',
+      placeholder: '或者自己写一个…',
+      class: 'feeling-tag__input',
+      oninput: () => {
+        // 自写时取消预设选中
+        if (customInput.value.trim()) {
+          $$('.feeling-tag__chip', overlay).forEach(c => c.classList.remove('is-selected'));
+          selectedTag = null;
+        }
+      },
+    });
+
+    const previewSlot = el('div', { class: 'feeling-tag__preview' });
+    const rerenderPreview = () => {
+      const tag = customInput.value.trim() || selectedTag;
+      previewSlot.innerHTML = '';
+      if (tag) {
+        previewSlot.appendChild(el('img', { src: renderFeelingCard(tag).toDataURL('image/png'), style: 'width:100%;border-radius:14px;box-shadow:0 8px 30px rgba(0,0,0,.45);', alt: '感受卡预览' }));
+      }
+    };
+    customInput.addEventListener('input', rerenderPreview);
+    // 预设 chip 选中时也刷新预览
+    const origOnclicks = tags.map((t, i) => {
+      const chip = tagChips.children[i];
+      const orig = chip.onclick;
+      chip.onclick = (e) => { orig(e); customInput.value = ''; rerenderPreview(); };
+    });
+
+    overlay.appendChild(el('div', { class: 'feeling-tag__content' }, [
+      el('div', { style: 'font-size:32px;margin-bottom:12px;' }, ['≋']),
+      el('h3', { class: 'h3 mb-3', style: 'text-align:center;' }, ['给这个感受起个名字']),
+      el('p', { class: 'muted mb-4', style: 'font-size:13px;line-height:1.6;text-align:center;' }, ['一个抽象的感受词——不写原文、不写人名、不写地点。只留一种感觉。']),
+      tagChips,
+      customInput,
+      previewSlot,
+      el('div', { class: 'flex gap-3 mt-4' }, [
+        el('button', { class: 'btn btn--ghost btn--lg', style: 'flex:1', onclick: () => {
+          // 跳过 → 不存标签，直接 peakEnd
+          TSD.addRevisit(momentId, feeling);
+          finishRevisit(navigate);
+          closeRitual(overlay);
+        } }, ['跳过']),
+        el('button', { class: 'btn btn--primary btn--lg', style: 'flex:1', onclick: async () => {
+          const tag = customInput.value.trim() || selectedTag;
+          TSD.addRevisit(momentId, feeling, tag);
+          haptic('success');
+          // 有标签 → 可选分享感受卡
+          if (tag) {
+            const canvas = renderFeelingCard(tag);
+            const blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
+            const file = new File([blob], 'tsd-feeling-' + Date.now() + '.png', { type: 'image/png' });
+            if (navigator.canShare && navigator.canShare({ files: [file] })) {
+              try { await navigator.share({ files: [file], title: '我也是', text: '"' + tag + '" — 我也是 · TimeSlowDown' }); } catch (e) { /* 取消 */ }
+            }
+          }
+          finishRevisit(navigate);
+          closeRitual(overlay);
+        } }, [selectedTag || customInput.value.trim() ? '分享感受卡' : '就这样']),
+      ]),
+      el('p', { class: 'muted mt-3', style: 'font-size:11px;text-align:center;' }, ['感受卡只含一个抽象词，零可识别信息 · 感知相似→分享（Liem）']),
+    ]));
+
+    document.body.appendChild(overlay);
+    requestAnimationFrame(() => overlay.classList.add('is-in'));
+  }
+
+  function closeRitual(overlay) {
+    overlay.classList.remove('is-in');
+    setTimeout(() => overlay.remove(), 320);
+  }
+
+  function finishRevisit(navigate) {
+    const neu = TSD.checkAchievements();
+    const qm = TSD.raw().settings && TSD.raw().settings.quietMode;
+    haptic(neu.length && !qm ? 'success' : 'impact');
+    peakEndRitual('这一层留住了', neu.length && !qm ? '又浮现一枚印记' : '被带回的这一刻，又厚了一层', () => navigate('today'));
+  }
+
+  // 纯感受卡 canvas（4p · 最小暴露面：只含抽象感受词 + TSD 水印，零可识别信息）
+  // 留白美学：莫兰迪/雾蓝/陶土渐变，区别于重逢卡旷野深色、信物卡雾蓝→陶土
+  function renderFeelingCard(tag) {
+    const W = 1080, H = 1350;
+    const c = document.createElement('canvas'); c.width = W; c.height = H;
+    const ctx = c.getContext('2d');
+    // 莫兰迪雾蓝→陶土渐变（亲密美学，与信物卡同族但更极简）
+    const g = ctx.createLinearGradient(0, 0, W, H);
+    g.addColorStop(0, '#2a2d3a');
+    g.addColorStop(0.5, '#2f2a30');
+    g.addColorStop(1, '#3a2e2a');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    // 装饰性圆环（与信物卡同族视觉语言）
+    ctx.beginPath(); ctx.arc(W / 2, H / 2 - 80, 120, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(216,201,160,.12)'; ctx.lineWidth = 2; ctx.stroke();
+    // 感受词（大字居中，衬线体，大量留白——像只写了一行诗的明信片）
+    ctx.fillStyle = '#ece8df'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = '44px "Songti SC","STSong","PingFang SC",serif';
+    canvasWrap(ctx, '"' + tag + '"', W / 2, H / 2 - 80, W - 220, 68);
+    // "我也是" 标记
+    ctx.textBaseline = 'alphabetic'; ctx.fillStyle = '#a39d92';
+    ctx.font = 'italic 28px "PingFang SC",serif';
+    ctx.fillText('我也是', W / 2, H / 2 + 60);
+    // TSD 水印
+    ctx.fillStyle = '#9a7f3a'; ctx.font = '500 22px "PingFang SC",sans-serif';
+    ctx.fillText('TimeSlowDown · 我也是', W / 2, H - 130);
+    return c;
   }
 
   // 峰终仪式（沉浸锚点 · 峰终定律）：会话结尾 1.1s 微仪式，满足性终止、送人离开（守原则9）
