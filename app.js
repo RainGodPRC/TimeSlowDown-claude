@@ -1002,6 +1002,11 @@ const App = (() => {
         el('div', { class: 'setting-row', onclick: () => navigate('report') }, [el('div', { class: 'setting-row__main' }, [el('div', { class: 'setting-row__title' }, ['你的时间被回访成了什么']), el('div', { class: 'setting-row__sub' }, ['反思性统计 + 怀旧重遇 · 每张可分享'])]), el('div', { class: 'list-row__right' }, ['▸'])]),
       ]),
 
+      el('div', { class: 'section-title' }, ['把 TSD 送给一个人']),
+      el('div', { class: 'card' }, [
+        el('div', { class: 'setting-row', onclick: () => navigate('invite') }, [el('div', { class: 'setting-row__main' }, [el('div', { class: 'setting-row__title' }, ['礼物式推荐']), el('div', { class: 'setting-row__sub' }, ['用你自己的话写给 ta · 零奖励、零积分'])]), el('div', { class: 'list-row__right' }, ['▸'])]),
+      ]),
+
       el('div', { class: 'section-title' }, ['关于']),
       el('div', { class: 'card text-center muted', style: 'font-size:12px;line-height:1.6;' }, [
         el('div', { class: 'serif', style: 'font-size:16px;color:var(--fg);margin-bottom:8px;' }, ['TimeSlowDown · Claude Code 分支']),
@@ -1299,6 +1304,31 @@ const App = (() => {
     ]));
   });
 
+  // ============================================================
+  // 视图：invite 礼物式推荐（C-F · 用户自写邀请，零奖励）
+  // ============================================================
+  route('invite', ({ view, navigate }) => {
+    view.appendChild(el('div', {}, [
+      el('div', { class: 'flex items-center justify-between mb-4' }, [el('button', { class: 'btn btn--sm btn--ghost', onclick: () => history.back() }, ['‹ 返回'])]),
+      el('h2', { class: 'h2 mb-2' }, ['把 TSD 送给一个人']),
+      el('p', { class: 'muted mb-4', style: 'font-size:13px;line-height:1.6;' }, ['不用奖励、不用积分。用你自己的话，写给那个你真想让 ta 也拥有回访的人——这才是礼物。']),
+      el('textarea', { id: 'invite-text', placeholder: '比如：我用它每天被带回一个旧瞬间，觉得你也会喜欢。', style: 'width:100%;min-height:100px;padding:14px;background:var(--bg-elev);border:1px solid var(--line-strong);border-radius:14px;font-size:15px;font-family:var(--font-serif);resize:none;margin-bottom:16px;' }),
+      el('div', { id: 'invite-preview', class: 'mb-4' }),
+      el('button', { class: 'btn btn--primary btn--block', onclick: async () => {
+        const t = ($('#invite-text', view) ? $('#invite-text', view).value.trim() : '') || '我用它每天被带回一个旧瞬间。';
+        const c = renderInviteCard(t); const blob = await new Promise(res => c.toBlob(res, 'image/png'));
+        const file = new File([blob], 'tsd-invite-' + Date.now() + '.png', { type: 'image/png' });
+        haptic('success');
+        if (navigator.canShare && navigator.canShare({ files: [file] })) { try { await navigator.share({ files: [file], title: '一封来自朋友的信', text: t }); return; } catch (e) {} }
+        const a = el('a', { href: URL.createObjectURL(blob), download: file.name }); document.body.appendChild(a); a.click(); a.remove(); toast('邀请卡已保存');
+      } }, ['生成邀请卡 · 分享']),
+      el('p', { class: 'muted mt-4', style: 'font-size:11px;text-align:center;' }, ['零奖励式推荐——条件性奖励侵蚀内驱动（Deci/Koestner/Ryan）；BetterHelp 因推荐奖励被 FTC 罚 780 万。']),
+    ]));
+    const rerender = () => { const t = ($('#invite-text', view) ? $('#invite-text', view).value.trim() : '') || '我用它每天被带回一个旧瞬间。'; const box = $('#invite-preview', view); if (box) { box.innerHTML = ''; box.appendChild(el('img', { src: renderInviteCard(t).toDataURL('image/png'), style: 'width:100%;border-radius:14px;' })); } };
+    $('#invite-text', view).addEventListener('input', rerender);
+    rerender();
+  });
+
   // ---------- 分享 sheet ----------
   // canvas 中文按字符换行
   function canvasWrap(ctx, text, x, y, maxW, lh) {
@@ -1406,6 +1436,19 @@ const App = (() => {
     ]);
     sheet(content);
     rerender();
+  }
+  // 礼物式推荐邀请卡（C-F · 用户自写文案，零奖励）
+  function renderInviteCard(userText) {
+    const W = 1080, H = 1350, c = document.createElement('canvas'); c.width = W; c.height = H;
+    const ctx = c.getContext('2d');
+    const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#1a1a22'); g.addColorStop(1, '#0b0b11');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#d8c9a0'; ctx.font = '600 28px "PingFang SC",sans-serif'; ctx.textAlign = 'left'; ctx.fillText('一封来自朋友的信', 88, 120);
+    ctx.textAlign = 'left'; ctx.fillStyle = '#ece8df'; ctx.font = '40px "Songti SC","PingFang SC",serif';
+    canvasWrap(ctx, '"' + userText + '"', 88, 560, W - 176, 62);
+    ctx.textAlign = 'center'; ctx.fillStyle = '#9a7f3a'; ctx.font = '500 26px "PingFang SC",sans-serif';
+    ctx.fillText('TimeSlowDown · 让走过的时间长成你的人生', W / 2, H - 130);
+    return c;
   }
   function openShareSheet(m, revs, navigate) {
     const cardSlot = el('div', { id: 'share-card-slot', class: 'mb-4' });
