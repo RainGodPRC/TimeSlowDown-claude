@@ -511,7 +511,7 @@ const App = (() => {
           // 已有层叠
           revs.length ? el('div', { class: 'moment-card__layers' }, revs.map(r =>
             el('div', { class: 'moment-card__layer' }, [
-              el('div', { class: 'moment-card__layer-time' }, [fmtDate(r.at) + ' · 回访']),
+              el('div', { class: 'moment-card__layer-time' }, [fmtDate(r.at) + ' · 回访' + (r.feelingTag ? ' · ' + r.feelingTag : '')]),
               el('div', {}, [r.feeling || '（只停留了一会儿，没说话）']),
             ])
           )) : null,
@@ -627,9 +627,24 @@ const App = (() => {
       revs.length ? el('div', { class: 'card' }, revs.map((r, i) =>
         el('div', { class: i > 0 ? 'moment-card__layer mt-3' : 'moment-card__layer' }, [
           el('div', { class: 'moment-card__layer-time' }, ['第 ' + (i + 1) + ' 次回访 · ' + fmtDate(r.at)]),
-          el('div', {}, [r.feeling || '（只停留了一会儿）']),
+          el('div', {}, [
+            r.feeling || '（只停留了一会儿）',
+            r.feelingTag ? el('span', { class: 'chip', style: 'margin-left:6px;font-size:10px;padding:1px 7px;' }, [r.feelingTag]) : null,
+          ]),
         ])
       )) : el('div', { class: 'card muted text-center', style: 'font-size:13px;' }, ['还没被回访过。']),
+
+      // 感受天气（该瞬间的情绪分布）
+      (() => {
+        const tagFreq = {};
+        revs.forEach(r => { if (r.feelingTag) tagFreq[r.feelingTag] = (tagFreq[r.feelingTag] || 0) + 1; });
+        return Object.keys(tagFreq).length >= 2
+          ? el('div', { class: 'card mt-3' }, [
+              el('div', { class: 'echo-card__label', style: 'margin-bottom:8px;' }, ['这个瞬间的感受天气']),
+              feelingWeatherChart(tagFreq),
+            ])
+          : null;
+      })(),
 
       el('button', { class: 'btn btn--primary btn--lg btn--block mt-5', onclick: () => navigate('revisit/' + id) }, ['再回访一次']),
       el('input', { type: 'file', accept: 'image/*', id: 'moment-photo', style: 'display:none;' }),
@@ -1325,6 +1340,12 @@ const App = (() => {
       s.topPerson ? card('stat', { headline: s.topPerson, label: '你反复回到的人', onShare: () => shareStatCard(s.topPerson, '你反复回到的人') }) : null,
       s.earliest ? card('quote', { title: '一切的起点', quote: s.earliest.quote, sub: '最早记录 · ' + fmtRelative(s.earliest.createdAt), m: s.earliest }) : null,
       s.topFeelingTag ? card('stat', { headline: s.topFeelingTag, label: '你最常回到的感受', onShare: () => shareStatCard(s.topFeelingTag, '你最常回到的感受') }) : null,
+      // 感受天气图（Stoic 式情绪可视化 · 守原则5：不排名/不比较/不评判，只展示分布）
+      Object.keys(s.feelingTagFreq).length >= 2 ? el('div', { class: 'card mb-3' }, [
+        el('div', { class: 'echo-card__label' }, ['感受天气']),
+        el('p', { class: 'muted', style: 'font-size:12px;margin:6px 0 16px;' }, ['你回访时的心情分布——没有好坏，只是天气。']),
+        feelingWeatherChart(s.feelingTagFreq),
+      ]) : null,
       el('p', { class: 'muted mt-5', style: 'font-size:11px;text-align:center;' }, ['反思性怀旧，不是竞争性统计。参 Spotify Wrapped 反 Feed 版；守原则7/9。']),
     ]));
   });
@@ -1537,6 +1558,20 @@ const App = (() => {
       else if (kind === 'warning') H.notification({ type: 'WARNING' });
       else H.impact({ style: 'LIGHT' });
     } catch (e) {}
+  }
+
+  // 感受天气图（Stoic 式情绪分布可视化 · 横条 bar chart，不排名只展示分布）
+  function feelingWeatherChart(freq) {
+    const entries = Object.entries(freq).sort((a, b) => b[1] - a[1]);
+    const max = entries[0][1];
+    const colors = ['var(--accent)', 'var(--growth)', 'var(--bloom)', 'var(--night)', 'var(--fg-soft)'];
+    return el('div', {}, entries.map(([tag, count], i) =>
+      el('div', { style: 'display:flex;align-items:center;gap:10px;margin-bottom:10px;' }, [
+        el('div', { style: 'flex:1;font-size:13px;font-family:var(--font-serif);color:var(--fg-soft);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;' }, [tag]),
+        el('div', { style: 'width:' + Math.max(20, (count / max) * 100) + '%;height:8px;border-radius:4px;background:' + colors[i % colors.length] + ';transition:width .5s var(--ease);flex-shrink:0;' }),
+        el('div', { class: 'nums', style: 'font-size:11px;color:var(--fg-faint);width:20px;text-align:right;flex-shrink:0;' }, [String(count)]),
+      ])
+    ));
   }
 
   // 4p "我也是"感受标签微仪式（病毒侧锚点C · 最小暴露面分享抽象感受）

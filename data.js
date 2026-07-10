@@ -535,6 +535,7 @@ const TSD = (() => {
       earliest,
       topFeelingTag: topFeelingTag ? topFeelingTag[0] : null,
       topFeelingTagCount: topFeelingTag ? topFeelingTag[1] : 0,
+      feelingTagFreq: tagFreq,
     };
   }
 
