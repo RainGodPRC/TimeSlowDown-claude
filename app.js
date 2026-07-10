@@ -1732,6 +1732,12 @@ const App = (() => {
     const neu = TSD.checkAchievements();
     const qm = TSD.raw().settings && TSD.raw().settings.quietMode;
     haptic(neu.length && !qm ? 'success' : 'impact');
+    // 推送 hook（Fogg Spark）：回访完成后调度明天的回声提醒（原生壳内生效，web 静默）
+    if (typeof PushHook !== 'undefined' && PushHook.isNative() && TSD.raw().notifications) {
+      PushHook.checkGraduation().then(status => {
+        if (status === 'active') PushHook.scheduleTomorrowEcho();
+      });
+    }
     peakEndRitual('这一层留住了', neu.length && !qm ? '又浮现一枚印记' : '被带回的这一刻，又厚了一层', () => navigate('today'));
   }
 
@@ -1898,6 +1904,14 @@ const App = (() => {
     TSD.checkAchievements(); // 启动静默解锁已达成成就（不在启动时 toast，避免噪音）
     haptic('impact'); // 入场触觉（D-B1）：建立"进入仪式空间"的条件反射（native 生效，web 静默）
     const newCaps = TSD.checkCapsuleUnlocks(); // 时间胶囊解锁检查（C-A）
+    // G 重遇推送：胶囊解锁时调度本地通知（原生壳内生效，web 静默）
+    if (typeof PushHook !== 'undefined' && PushHook.isNative() && newCaps.length) {
+      PushHook.scheduleReunionReminder(
+        new Date(Date.now() + 5 * 60 * 1000), // 5 分钟后推送（让用户先看到仪式）
+        '一封来自过去的信到了',
+        '你封存的瞬间，今天解锁了。'
+      );
+    }
     const path = location.hash.replace('#', '') || 'today';
     render(path);
     const boot = document.getElementById('boot');
