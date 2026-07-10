@@ -336,6 +336,10 @@ const App = (() => {
         el('div', { class: 'section-title' }, ['本周回访图谱']),
         weekGraph(navigate),
 
+        // 回访日历热力图（Stoic/Day One 式 · 近 8 周回访密度可视化）
+        el('div', { class: 'section-title' }, ['回访日历']),
+        revisitHeatmap(),
+
         // 今日微小行动（原则6：导向行动）
         el('div', { class: 'section-title' }, ['今天的一个小动作']),
         el('div', { class: 'card card--glass' }, [
@@ -389,6 +393,8 @@ const App = (() => {
   // 回声卡 —— 被带回的过去（opts.thread 存在时 = Zeigarnik 开放回路的"续昨天的引子"）
   function echoCard(m, opts = {}) {
     const revCount = TSD.getRevisitCount(m.id);
+    const revs = TSD.getRevisits(m.id);
+    const lastFeelingTag = revs.length ? revs[revs.length - 1].feelingTag : null;
     return el('div', { class: 'echo-card' }, [
       el('div', { class: 'echo-card__label' }, [opts.thread ? '✦ 继续昨天的引子' : '今天的回声']),
       opts.thread ? el('div', { class: 'echo-card__thread' }, [
@@ -399,6 +405,7 @@ const App = (() => {
       el('div', { class: 'echo-card__when' }, [
         fmtWhen(m.when),
         revCount > 0 ? ' · 已回访 ' + revCount + ' 次' : ' · 第一次被带回',
+        lastFeelingTag ? ' · ' + lastFeelingTag : '',
       ]),
       opts.media !== false && m.media ? el('img', { src: m.media, style: 'max-width:60%;border-radius:14px;margin:0 auto 20px;position:relative;' }) : null,
       el('div', { class: 'echo-card__actions' }, [
@@ -1558,6 +1565,64 @@ const App = (() => {
       else if (kind === 'warning') H.notification({ type: 'WARNING' });
       else H.impact({ style: 'LIGHT' });
     } catch (e) {}
+  }
+
+  // 回访日历热力图（Stoic/Day One 式 · 近 8 周回访密度可视化）
+  function revisitHeatmap() {
+    const now = new Date(); now.setHours(0,0,0,0);
+    const todayMs = now.getTime();
+    const dayMs = 86400000;
+    // 构建近 56 天（8 周）的日历
+    const days = [];
+    for (let i = 55; i >= 0; i--) {
+      const dayStart = todayMs - i * dayMs;
+      const dayEnd = dayStart + dayMs;
+      const count = TSD.raw().revisits.filter(r => r.at >= dayStart && r.at < dayEnd).length;
+      days.push({ dayStart, count, isToday: i === 0 });
+    }
+    // 渲染：7 列 × 8 行（周一→周日，8 周）
+    const weekDays = ['一', '二', '三', '四', '五', '六', '日'];
+    // 调整到周一开始
+    const firstDay = new Date(days[0].dayStart);
+    const offset = (firstDay.getDay() + 6) % 7; // 0=Mon
+    const grid = [];
+    // 填充前面的空白
+    for (let i = 0; i < offset; i++) grid.push(null);
+    days.forEach(d => grid.push(d));
+
+    const maxCount = Math.max(...days.map(d => d.count), 1);
+    const cellColor = (count) => {
+      if (!count && count !== 0) return 'background:transparent;';
+      if (count === 0) return 'background:var(--bg-elev-2);';
+      const intensity = Math.min(count / maxCount, 1);
+      if (intensity < 0.33) return 'background:rgba(240,178,136,.25);';
+      if (intensity < 0.66) return 'background:rgba(240,178,136,.5);';
+      return 'background:var(--accent);';
+    };
+
+    return el('div', { class: 'card' }, [
+      el('div', { style: 'display:flex;gap:2px;font-size:9px;color:var(--fg-faint);margin-bottom:6px;' }, weekDays.map(w =>
+        el('div', { style: 'flex:1;text-align:center;' }, [w])
+      )),
+      el('div', { style: 'display:grid;grid-template-columns:repeat(7,1fr);gap:3px;' },
+        grid.map(d => {
+          if (!d) return el('div', { style: 'aspect-ratio:1;border-radius:3px;' });
+          const dateStr = new Date(d.dayStart).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
+          return el('div', {
+            style: 'aspect-ratio:1;border-radius:3px;' + cellColor(d.count) + (d.isToday ? 'outline:2px solid var(--accent);outline-offset:1px;' : ''),
+            title: dateStr + '：回访 ' + d.count + ' 次',
+          });
+        })
+      ),
+      el('div', { style: 'display:flex;align-items:center;gap:6px;margin-top:10px;justify-content:flex-end;' }, [
+        el('div', { class: 'muted', style: 'font-size:10px;' }, ['少']),
+        el('div', { style: 'width:10px;height:10px;border-radius:2px;background:var(--bg-elev-2);' }),
+        el('div', { style: 'width:10px;height:10px;border-radius:2px;background:rgba(240,178,136,.25);' }),
+        el('div', { style: 'width:10px;height:10px;border-radius:2px;background:rgba(240,178,136,.5);' }),
+        el('div', { style: 'width:10px;height:10px;border-radius:2px;background:var(--accent);' }),
+        el('div', { class: 'muted', style: 'font-size:10px;' }, ['多']),
+      ]),
+    ]);
   }
 
   // 感受天气图（Stoic 式情绪分布可视化 · 横条 bar chart，不排名只展示分布）

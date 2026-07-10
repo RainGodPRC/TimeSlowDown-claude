@@ -383,6 +383,17 @@ ul, ol { list-style: none; }
   padding-left: var(--sp-3);
   border-left: 2px solid var(--accent-soft);
   line-height: 1.5;
+  position: relative;
+}
+/* 层叠时间线节点圆点 */
+.moment-card__layer::before {
+  content: "";
+  position: absolute;
+  left: -5px; top: 6px;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 4px var(--accent-glow);
 }
 .moment-card__layer-time {
   font-size: 10px;
