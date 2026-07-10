@@ -283,6 +283,44 @@ const TSD = (() => {
     return 'thick';
   }
 
+  // ---------- 开放回路（Zeigarnik · 低频留存锚点）----------
+  // 原理：未完的念头制造记忆张力，驱动次日主动回来"续上"——天然同构于回访主轴。
+  // 守原则5：全局同时只 1 条引子（低频）、3 天静默过期（无提醒/无羞辱）、绝不展示"X 条待续"计数。
+  // 守原则9：引子只在"今天的回声"里温和浮出一次，不增加会话时长。
+  const THREAD_TTL_DAYS = 3;
+  function setThread(momentId, text) {
+    if (!text || !text.trim()) return clearThread(momentId);
+    // 低频铁律：开新引子前，静默关闭其它所有引子（全局至多 1 条）
+    state.moments.forEach(m => { if (m.id !== momentId && m.thread) m.thread = null; });
+    const m = getMoment(momentId);
+    if (!m) return null;
+    m.thread = { text: text.trim(), setAt: Date.now() };
+    save();
+    return m.thread;
+  }
+  function clearThread(momentId) {
+    const m = getMoment(momentId);
+    if (m && m.thread) { m.thread = null; save(); }
+    return null;
+  }
+  // 返回"今日应续"的活跃引子：昨日或更早设置、未过期、今天还没回访过。
+  // 顺带静默清扫过期引子（无任何用户可见提示）。
+  function activeThread() {
+    const now = Date.now();
+    const today0 = new Date(); today0.setHours(0, 0, 0, 0);
+    const todayMs = today0.getTime();
+    let expired = false, found = null;
+    for (const m of state.moments) {
+      if (!m.thread) continue;
+      if ((now - m.thread.setAt) / 86400000 > THREAD_TTL_DAYS) { m.thread = null; expired = true; continue; } // 静默过期
+      if (m.thread.setAt >= todayMs) continue;                                   // 今天刚设，明天才浮出
+      if (state.revisits.some(r => r.momentId === m.id && r.at >= todayMs)) continue; // 今天已回访，视为已续
+      if (!found) found = { moment: m, thread: m.thread };
+    }
+    if (expired) save();
+    return found;
+  }
+
   // ---------- T2-ClaudeCode 回访候选发现 ----------
   // 与 Codex T2（今天不像昨天）的核心差异：本调度指向"过去哪个瞬间值得带回"
   function pickEcho() {
@@ -294,6 +332,9 @@ const TSD = (() => {
     // 反信息茧房：综合 久未回访 + 重要 + 随机 + 情境
     const candidates = state.moments.filter(m => m.confirmed !== false);
     if (!candidates.length) return null;
+
+    // 开放回路（Zeigarnik）：昨天的未完引子今天近乎必然被带回（低频：全局至多 1 条）
+    const thread = activeThread();
 
     const scored = candidates.map(m => {
       const revs = getRevisits(m.id);
@@ -311,6 +352,8 @@ const TSD = (() => {
       score += Math.random() * 8;
       // 避免连续推同一个：上次推过的降权
       if (state.lastEchoMomentId === m.id) score *= 0.3;
+      // 开放回路压倒一切：未完引子 +60（基线最高 ~40，引子必胜）
+      if (thread && thread.moment.id === m.id) score += 60;
       return { m, score, daysSince, count: revs.length };
     });
     scored.sort((a, b) => b.score - a.score);
@@ -580,6 +623,7 @@ const TSD = (() => {
     raw: () => state,
     getMoments, getMoment, addMoment, updateMoment,
     getRevisits, getRevisitCount, addRevisit, thickness,
+    setThread, clearThread, activeThread,
     pickEcho, weekRevisits, weekRevisitStats, ninetyDayStats,
     setOnboarded, setBirthYear, setReviewContext, setNotifications,
     setPrivacyMode, setAiConsent, setSetting, setTier,

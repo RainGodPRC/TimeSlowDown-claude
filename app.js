@@ -272,6 +272,8 @@ const App = (() => {
     const stats = TSD.weekRevisitStats();
     const nd = TSD.ninetyDayStats();
     const echo = TSD.pickEcho();
+    // 开放回路（Zeigarnik）：若今日回声正是昨天的未完引子，回声卡显示"继续昨天的引子"
+    const dueThread = TSD.activeThread();
 
     view.appendChild(
       el('div', {}, [
@@ -295,6 +297,7 @@ const App = (() => {
           navigate,
           ctaText: '带回这一刻',
           ctaAction: () => navigate('revisit/' + echo.id),
+          thread: (dueThread && dueThread.moment.id === echo.id) ? dueThread.thread : null,
         }) : el('div', { class: 'empty' }, [
           el('div', { class: 'empty__icon' }, ['⊘']),
           el('div', { class: 'empty__title' }, ['还没有可回访的瞬间']),
@@ -383,11 +386,15 @@ const App = (() => {
     return '今天做一件事的时候，多停 10 秒看看它。';
   }
 
-  // 回声卡 —— 被带回的过去
+  // 回声卡 —— 被带回的过去（opts.thread 存在时 = Zeigarnik 开放回路的"续昨天的引子"）
   function echoCard(m, opts = {}) {
     const revCount = TSD.getRevisitCount(m.id);
     return el('div', { class: 'echo-card' }, [
-      el('div', { class: 'echo-card__label' }, ['今天的回声']),
+      el('div', { class: 'echo-card__label' }, [opts.thread ? '✦ 继续昨天的引子' : '今天的回声']),
+      opts.thread ? el('div', { class: 'echo-card__thread' }, [
+        el('div', { class: 'muted', style: 'font-size:11px;margin-bottom:4px;' }, ['你昨天留了半句：']),
+        el('div', { class: 'serif', style: 'font-size:14px;line-height:1.55;color:var(--fg);' }, ['"' + opts.thread.text + '"']),
+      ]) : null,
       el('div', { class: 'echo-card__quote serif' }, ['"' + m.quote + '"']),
       el('div', { class: 'echo-card__when' }, [
         fmtWhen(m.when),
@@ -525,6 +532,11 @@ const App = (() => {
           style: 'width:100%;min-height:80px;padding:14px;background:var(--bg-elev);border:1px solid var(--line-strong);border-radius:14px;font-size:15px;resize:none;',
           disabled: true,
         }),
+        // 开放回路（Zeigarnik）：可选"留半句给明天"——低频、可忽略；勾选后这句未完感受成为明日引子
+        el('label', { style: 'display:flex;align-items:flex-start;gap:8px;margin-top:12px;font-size:13px;color:var(--fg-mute);cursor:pointer;line-height:1.4;' }, [
+          el('input', { type: 'checkbox', id: 'thread-check', disabled: true, style: 'margin-top:2px;accent-color:var(--accent);width:16px;height:16px;flex:none;' }),
+          el('span', {}, ['这句还没想完，明天再续（留个引子）']),
+        ]),
         el('div', { class: 'flex gap-3 mt-3' }, [
           el('button', { class: 'btn btn--ghost btn--lg', style: 'flex:1', onclick: () => navigate('today') }, ['就到这里']),
           el('button', { class: 'btn btn--primary btn--lg', style: 'flex:1', id: 'save-feeling', disabled: true }, ['留下这一层']),
@@ -548,6 +560,7 @@ const App = (() => {
         clearInterval(timerInt);
         $('#feeling-input', view).disabled = false;
         $('#save-feeling', view).disabled = false;
+        $('#thread-check', view).disabled = false;
         ringLabel.textContent = '✓';
         toast('可以补一句了，也可以不补');
       }
@@ -556,6 +569,9 @@ const App = (() => {
     $('#save-feeling', view).addEventListener('click', () => {
       const v = $('#feeling-input', view).value.trim();
       TSD.addRevisit(id, v);
+      // 开放回路（Zeigarnik）：勾选"明天再续"且写了字 → 这句未完感受成为明日引子；否则视为续完，关闭回路
+      const keepOpen = $('#thread-check', view).checked && v;
+      if (keepOpen) TSD.setThread(id, v); else TSD.clearThread(id);
       // 记录 AI 任务日志（T1 忠实整理：只排列不改写）
       TSD.logAiTask({
         type: 'T1',
