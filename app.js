@@ -592,6 +592,7 @@ const App = (() => {
       el('input', { type: 'file', accept: 'image/*', id: 'moment-photo', style: 'display:none;' }),
       el('button', { class: 'btn btn--ghost btn--block mt-3', onclick: () => $('#moment-photo', view).click() }, [m.media ? '换一张影像' : '补一张影像（作回访入口）']),
       el('button', { class: 'btn btn--ghost btn--block mt-3', onclick: () => openSealSheet(m) }, ['封存给未来的自己 ✉']),
+      el('button', { class: 'btn btn--ghost btn--block mt-3', onclick: () => openTellOneSheet(m) }, ['讲给一个人听 ✉']),
       el('button', { class: 'btn btn--ghost btn--block mt-3', onclick: () => openShareSheet(m, revs, navigate) }, ['分享这一刻']),
     ]));
     $('#moment-photo', view).addEventListener('change', async (e) => {
@@ -1339,6 +1340,50 @@ const App = (() => {
     const file = new File([blob], 'tsd-report-' + Date.now() + '.png', { type: 'image/png' });
     if (navigator.canShare && navigator.canShare({ files: [file] })) { try { await navigator.share({ files: [file], title: 'TimeSlowDown · 重逢报告' }); return; } catch (e) {} }
     const a = el('a', { href: URL.createObjectURL(blob), download: file.name }); document.body.appendChild(a); a.click(); a.remove(); toast('已保存报告卡');
+  }
+  // 讲给一个人：信物卡（C-B · 二元具名，雾蓝→陶土亲密美学，区别于重逢卡的旷野深色）
+  function renderGiftCard(m, recipient) {
+    const W = 1080, H = 1350, c = document.createElement('canvas'); c.width = W; c.height = H;
+    const ctx = c.getContext('2d');
+    const g = ctx.createLinearGradient(0, 0, W, H); g.addColorStop(0, '#2a2d3a'); g.addColorStop(1, '#3a2e2a');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    const initial = ((recipient || '你').trim().charAt(0)) || '你';
+    ctx.beginPath(); ctx.arc(W / 2, 300, 92, 0, Math.PI * 2); ctx.fillStyle = 'rgba(216,201,160,.16)'; ctx.fill();
+    ctx.fillStyle = '#d8c9a0'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '600 74px "PingFang SC",serif';
+    ctx.fillText(initial, W / 2, 302);
+    ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'left'; ctx.fillStyle = '#ece8df'; ctx.font = '40px "Songti SC","PingFang SC",serif';
+    let endY = canvasWrap(ctx, '"' + m.quote + '"', 110, 560, W - 220, 62);
+    ctx.textAlign = 'center'; ctx.fillStyle = '#a39d92'; ctx.font = '26px "PingFang SC",serif';
+    ctx.fillText('给 ' + (recipient || '你') + ' · 这一刻只留给你', W / 2, endY + 80);
+    ctx.fillStyle = '#9a7f3a'; ctx.font = '500 22px "PingFang SC",sans-serif';
+    ctx.fillText('TimeSlowDown · 一对一的信物', W / 2, H - 130);
+    return c;
+  }
+  function openTellOneSheet(m) {
+    const previewSlot = el('div', { class: 'mb-4' });
+    const nameInput = el('input', { id: 'gift-recipient', placeholder: '给谁？（一个名字，只发给 ta）', style: 'width:100%;padding:12px;background:var(--bg-elev);border:1px solid var(--line-strong);border-radius:10px;margin-bottom:16px;text-align:center;font-size:15px;' });
+    const rerender = () => {
+      const name = ($('#gift-recipient') ? $('#gift-recipient').value.trim() : '') || '你';
+      previewSlot.innerHTML = '';
+      previewSlot.appendChild(el('img', { src: renderGiftCard(m, name).toDataURL('image/png'), style: 'width:100%;border-radius:14px;box-shadow:0 8px 30px rgba(0,0,0,.45);', alt: '信物卡' }));
+    };
+    nameInput.addEventListener('input', rerender);
+    const content = el('div', {}, [
+      el('h3', { class: 'h3 mb-3' }, ['讲给一个人听']),
+      el('p', { class: 'muted mb-4', style: 'font-size:13px;line-height:1.6;' }, ['不是发到网上。生成一张只给 ta 的信物卡，私发给一个人——一天给一个人，是礼物，不是消息。']),
+      nameInput, previewSlot,
+      el('button', { class: 'btn btn--primary btn--block mt-3', onclick: async () => {
+        const name = ($('#gift-recipient') ? $('#gift-recipient').value.trim() : '') || '你';
+        const c = renderGiftCard(m, name); const blob = await new Promise(res => c.toBlob(res, 'image/png'));
+        const file = new File([blob], 'tsd-gift-' + Date.now() + '.png', { type: 'image/png' });
+        haptic('success');
+        if (navigator.canShare && navigator.canShare({ files: [file] })) { try { await navigator.share({ files: [file], title: '给你的一个瞬间', text: '我把这个瞬间留给你，不是发到网上。' }); return; } catch (e) {} }
+        const a = el('a', { href: URL.createObjectURL(blob), download: file.name }); document.body.appendChild(a); a.click(); a.remove(); toast('信物卡已保存，私发给 ta');
+      } }, ['生成信物卡 · 私发给 ta']),
+      el('p', { class: 'muted mt-3', style: 'font-size:11px;text-align:center;' }, ['默认无人脸/无定位。窄播比广播更利他、更可能被珍藏（Barasch & Berger）。']),
+    ]);
+    sheet(content);
+    rerender();
   }
   function openShareSheet(m, revs, navigate) {
     const cardSlot = el('div', { id: 'share-card-slot', class: 'mb-4' });
