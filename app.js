@@ -287,6 +287,9 @@ const App = (() => {
           el('button', { class: 'chip chip--accent', onclick: () => navigate('wilderness') }, ['人生周格 ▸']),
         ]),
 
+        // Fresh-Start 仪式（周一/月初）
+        ...(freshStart() ? [freshStart()] : []),
+
         // 今天的回声 —— 主交付
         echo ? echoCard(echo, {
           navigate,
@@ -350,6 +353,25 @@ const App = (() => {
     if (h < 12) return '清晨 · ' + wd;
     if (h < 18) return '午后 · ' + wd;
     return '夜晚 · ' + wd;
+  }
+
+  // Fresh-Start 仪式（B-D / Dai 2014 temporal landmarks）：周一/月初温和重启点
+  function freshStart() {
+    const now = new Date();
+    const dow = now.getDay(), dom = now.getDate();
+    let title = null, sub = null;
+    if (dow === 1) { const last = TSD.weekRevisitStats(); title = '新的一周'; sub = '上周你回访了 ' + last.distinct + ' 个旧瞬间——这周再被带回几次。'; }
+    else if (dom === 1) { title = '新的一个月'; sub = '上个月的瞬间，正等被你重新看见。'; }
+    if (!title) return null;
+    return el('div', { class: 'card card--glass' }, [
+      el('div', { class: 'flex items-center gap-3' }, [
+        el('div', { style: 'font-size:24px;' }, ['✦']),
+        el('div', {}, [
+          el('div', { class: 'serif', style: 'font-size:16px;color:var(--fg);' }, [title]),
+          el('div', { class: 'muted', style: 'font-size:12px;margin-top:2px;' }, [sub]),
+        ]),
+      ]),
+    ]);
   }
 
   function todayActionHint(echo) {
