@@ -405,8 +405,8 @@ const App = (() => {
       el('div', { class: 'echo-card__when' }, [
         fmtWhen(m.when),
         revCount > 0 ? ' · 已回访 ' + revCount + ' 次' : ' · 第一次被带回',
-        lastFeelingTag ? ' · ' + lastFeelingTag : '',
       ]),
+      lastFeelingTag ? el('div', { class: 'echo-card__mood' }, [lastFeelingTag]) : null,
       opts.media !== false && m.media ? el('img', { src: m.media, style: 'max-width:60%;border-radius:14px;margin:0 auto 20px;position:relative;' }) : null,
       el('div', { class: 'echo-card__actions' }, [
         el('button', { class: 'btn btn--primary btn--lg btn--block', onclick: opts.ctaAction }, [opts.ctaText || '带回这一刻']),

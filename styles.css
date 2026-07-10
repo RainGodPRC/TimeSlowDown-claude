@@ -440,7 +440,19 @@ ul, ol { list-style: none; }
 .echo-card__when {
   font-size: 13px;
   color: var(--fg-soft);
-  margin-bottom: var(--sp-6);
+  margin-bottom: var(--sp-3);
+  position: relative;
+}
+.echo-card__mood {
+  display: inline-block;
+  padding: 3px 12px;
+  border-radius: var(--r-pill);
+  background: rgba(240,178,136,.12);
+  border: 1px solid rgba(240,178,136,.25);
+  font-size: 12px;
+  font-family: var(--font-serif);
+  color: var(--accent);
+  margin-bottom: var(--sp-4);
   position: relative;
 }
 .echo-card__actions {

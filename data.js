@@ -135,11 +135,11 @@ const TSD = (() => {
 
   // 种子回访记录 —— 让"变厚"和"层叠"在首屏就能看到
   const SEED_REVISITS = [
-    { id: 'r-01', momentId: 'm-seed-03', at: daysAgo(30) * 1000, feeling: '今天又想起这碗面。想周末回家一趟。', source: 'user' },
-    { id: 'r-02', momentId: 'm-seed-03', at: daysAgo(10) * 1000, feeling: '爸爸最近接电话慢了半拍。', source: 'user' },
-    { id: 'r-03', momentId: 'm-seed-01', at: daysAgo(20) * 1000, feeling: '孩子现在爬滑梯都不用我看着了。', source: 'user' },
-    { id: 'r-04', momentId: 'm-seed-02', at: daysAgo(15) * 1000, feeling: '已经能跑8公里了。原来那天是真的开始。', source: 'user' },
-    { id: 'r-05', momentId: 'm-seed-07', at: daysAgo(5) * 1000, feeling: '又想给他打个电话了。', source: 'user' },
+    { id: 'r-01', momentId: 'm-seed-03', at: daysAgo(30) * 1000, feeling: '今天又想起这碗面。想周末回家一趟。', feelingTag: '一种说不出的想念', source: 'user' },
+    { id: 'r-02', momentId: 'm-seed-03', at: daysAgo(10) * 1000, feeling: '爸爸最近接电话慢了半拍。', feelingTag: '那时候不懂', source: 'user' },
+    { id: 'r-03', momentId: 'm-seed-01', at: daysAgo(20) * 1000, feeling: '孩子现在爬滑梯都不用我看着了。', feelingTag: '一种轻轻的释然', source: 'user' },
+    { id: 'r-04', momentId: 'm-seed-02', at: daysAgo(15) * 1000, feeling: '已经能跑8公里了。原来那天是真的开始。', feelingTag: '原来已经走了这么远', source: 'user' },
+    { id: 'r-05', momentId: 'm-seed-07', at: daysAgo(5) * 1000, feeling: '又想给他打个电话了。', feelingTag: '远远的温暖', source: 'user' },
   ];
 
   function daysAgo(n) {
