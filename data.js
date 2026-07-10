@@ -444,6 +444,32 @@ const TSD = (() => {
   }
   function markCapsuleViewed(id) { const c = (state.capsules || []).find(x => x.id === id); if (c && !c.viewed) { c.viewed = true; save(); } }
 
+  // ---------- 重逢报告（C-D · 反思性统计，Wrapped 反 Feed 版）----------
+  // 守 C 铁律：基数计数/描述过去时/第一人称/无排行/无百分位/无群体参照
+  function reportStats() {
+    const ms = state.moments.filter(m => m.confirmed !== false);
+    const revs = state.revisits || [];
+    const revCount = {}; revs.forEach(r => revCount[r.momentId] = (revCount[r.momentId] || 0) + 1);
+    const thickestEntry = Object.entries(revCount).sort((a, b) => b[1] - a[1])[0];
+    const thickest = thickestEntry ? state.moments.find(m => m.id === thickestEntry[0]) : null;
+    const ppl = {}; ms.forEach(m => (m.people || []).forEach(p => p && (ppl[p] = (ppl[p] || 0) + 1)));
+    const topPerson = Object.entries(ppl).sort((a, b) => b[1] - a[1])[0];
+    const tags = {}; ms.forEach(m => (m.tags || []).forEach(t => tags[t] = (tags[t] || 0) + 1));
+    const topTag = Object.entries(tags).sort((a, b) => b[1] - a[1])[0];
+    const crossYear = revs.filter(r => { const m = state.moments.find(x => x.id === r.momentId); return m && m.createdAt && (r.at - m.createdAt) >= 365 * 864e5; }).length;
+    const earliest = ms.filter(m => m.createdAt).sort((a, b) => a.createdAt - b.createdAt)[0];
+    return {
+      momentCount: ms.length,
+      revisitCount: revs.length,
+      thickestCount: thickestEntry ? thickestEntry[1] : 0,
+      thickestQuote: thickest ? thickest.quote : null,
+      topPerson: topPerson ? topPerson[0] : null,
+      topTag: topTag ? topTag[0] : null,
+      crossYearRevisits: crossYear,
+      earliest,
+    };
+  }
+
   // ---------- 导出 / 清空 ----------
   function exportData() {
     return JSON.parse(JSON.stringify(state));
@@ -560,6 +586,7 @@ const TSD = (() => {
     logAiTask, revertAiTask, getAiLog,
     checkAchievements, getAchievements,
     addCapsule, getCapsules, checkCapsuleUnlocks, markCapsuleViewed,
+    reportStats,
     exportData, clearAll, lifeWeeks,
     makePackage, importPackage, applyImport,
     softDelete, hasTombstone, restoreTombstone, clearTombstone,

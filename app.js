@@ -974,6 +974,11 @@ const App = (() => {
         el('div', { class: 'setting-row', onclick: () => navigate('capsules') }, [el('div', { class: 'setting-row__main' }, [el('div', { class: 'setting-row__title' }, ['时间胶囊']), el('div', { class: 'setting-row__sub' }, ['封存给未来的自己 · ' + TSD.getCapsules().length + ' 封'])]), el('div', { class: 'list-row__right' }, ['▸'])]),
       ]),
 
+      el('div', { class: 'section-title' }, ['重逢报告']),
+      el('div', { class: 'card' }, [
+        el('div', { class: 'setting-row', onclick: () => navigate('report') }, [el('div', { class: 'setting-row__main' }, [el('div', { class: 'setting-row__title' }, ['你的时间被回访成了什么']), el('div', { class: 'setting-row__sub' }, ['反思性统计 + 怀旧重遇 · 每张可分享'])]), el('div', { class: 'list-row__right' }, ['▸'])]),
+      ]),
+
       el('div', { class: 'section-title' }, ['关于']),
       el('div', { class: 'card text-center muted', style: 'font-size:12px;line-height:1.6;' }, [
         el('div', { class: 'serif', style: 'font-size:16px;color:var(--fg);margin-bottom:8px;' }, ['TimeSlowDown · Claude Code 分支']),
@@ -1234,6 +1239,43 @@ const App = (() => {
     ]));
   });
 
+  // ============================================================
+  // 视图：report 重逢报告（C-D · Wrapped 反 Feed 版，反思性统计 + 怀旧重遇）
+  // ============================================================
+  route('report', ({ view, navigate }) => {
+    const s = TSD.reportStats();
+    const card = (kind, opts) => {
+      const c = el('div', { class: 'card mb-3', style: 'position:relative;' });
+      if (kind === 'stat') {
+        c.appendChild(el('div', { class: 'text-center' }, [
+          el('div', { class: 'serif nums', style: 'font-size:56px;color:var(--accent);font-weight:700;' }, [String(opts.headline)]),
+          el('div', { class: 'muted', style: 'font-size:14px;margin-top:8px;' }, [opts.label]),
+        ]));
+        if (opts.onShare) c.appendChild(el('button', { class: 'btn btn--ghost btn--sm', style: 'position:absolute;top:12px;right:12px;', onclick: opts.onShare }, ['分享']));
+      } else {
+        c.appendChild(el('div', {}, [
+          el('div', { class: 'echo-card__label' }, [opts.title]),
+          el('div', { class: 'serif', style: 'font-size:17px;line-height:1.5;margin:10px 0;color:var(--fg);' }, ['"' + opts.quote + '"']),
+          el('div', { class: 'muted', style: 'font-size:11px;' }, [opts.sub]),
+        ]));
+        if (opts.m) c.appendChild(el('button', { class: 'btn btn--ghost btn--sm mt-3', onclick: () => shareRevisitCard(opts.m, []) }, ['分享这一刻']));
+      }
+      return c;
+    };
+    view.appendChild(el('div', {}, [
+      el('div', { class: 'flex items-center justify-between mb-4' }, [el('button', { class: 'btn btn--sm btn--ghost', onclick: () => history.back() }, ['‹ 返回'])]),
+      el('h2', { class: 'h2 mb-2' }, ['重逢报告']),
+      el('p', { class: 'muted mb-5', style: 'font-size:13px;line-height:1.6;' }, ['你的时间，被回访成了什么样。每张都可分享——不打分、不排行、不与他人比。']),
+      card('stat', { headline: s.momentCount, label: '个瞬间，被你留下', onShare: () => shareStatCard(s.momentCount, '个瞬间，被你留下') }),
+      card('stat', { headline: s.revisitCount, label: '次，你被带回过去', onShare: () => shareStatCard(s.revisitCount, '次，你被带回过去') }),
+      s.crossYearRevisits ? card('stat', { headline: s.crossYearRevisits, label: '次，你重逢了多年前的旧时光', onShare: () => shareStatCard(s.crossYearRevisits, '次，重逢多年前的旧时光') }) : null,
+      s.thickestQuote ? card('quote', { title: '你最常回到的瞬间', quote: s.thickestQuote, sub: '被回访 ' + s.thickestCount + ' 次', m: { quote: s.thickestQuote, when: { text: '回访 ' + s.thickestCount + ' 次' } } }) : null,
+      s.topPerson ? card('stat', { headline: s.topPerson, label: '你反复回到的人', onShare: () => shareStatCard(s.topPerson, '你反复回到的人') }) : null,
+      s.earliest ? card('quote', { title: '一切的起点', quote: s.earliest.quote, sub: '最早记录 · ' + fmtRelative(s.earliest.createdAt), m: s.earliest }) : null,
+      el('p', { class: 'muted mt-5', style: 'font-size:11px;text-align:center;' }, ['反思性怀旧，不是竞争性统计。参 Spotify Wrapped 反 Feed 版；守原则7/9。']),
+    ]));
+  });
+
   // ---------- 分享 sheet ----------
   // canvas 中文按字符换行
   function canvasWrap(ctx, text, x, y, maxW, lh) {
@@ -1276,6 +1318,27 @@ const App = (() => {
     }
     const a = el('a', { href: URL.createObjectURL(blob), download: file.name }); document.body.appendChild(a); a.click(); a.remove();
     toast('重逢卡已保存为图片');
+  }
+  // 重逢报告 stat 卡（C-D）：大数字/词 + label，居中，可分享 PNG
+  function renderStatCard(headline, label) {
+    const W = 1080, H = 1350, c = document.createElement('canvas'); c.width = W; c.height = H;
+    const ctx = c.getContext('2d');
+    const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#16161e'); g.addColorStop(1, '#0b0b11');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#d8c9a0'; ctx.font = '600 28px "PingFang SC",sans-serif'; ctx.textAlign = 'left'; ctx.fillText('TimeSlowDown · 重逢', 88, 120);
+    ctx.textAlign = 'center'; ctx.fillStyle = '#ece8df'; ctx.font = 'bold 140px "PingFang SC",sans-serif';
+    ctx.fillText(String(headline), W / 2, H / 2 - 20);
+    ctx.fillStyle = '#a39d92'; ctx.font = '32px "PingFang SC",serif';
+    ctx.fillText(label, W / 2, H / 2 + 90);
+    ctx.fillStyle = '#9a7f3a'; ctx.font = '500 24px "PingFang SC",sans-serif'; ctx.fillText('让走过的时间，长成你的人生', W / 2, H - 130);
+    return c;
+  }
+  async function shareStatCard(headline, label) {
+    const c = renderStatCard(headline, label);
+    const blob = await new Promise(res => c.toBlob(res, 'image/png'));
+    const file = new File([blob], 'tsd-report-' + Date.now() + '.png', { type: 'image/png' });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) { try { await navigator.share({ files: [file], title: 'TimeSlowDown · 重逢报告' }); return; } catch (e) {} }
+    const a = el('a', { href: URL.createObjectURL(blob), download: file.name }); document.body.appendChild(a); a.click(); a.remove(); toast('已保存报告卡');
   }
   function openShareSheet(m, revs, navigate) {
     const cardSlot = el('div', { id: 'share-card-slot', class: 'mb-4' });
