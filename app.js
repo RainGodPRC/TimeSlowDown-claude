@@ -1074,6 +1074,9 @@ const App = (() => {
       ['价值阶梯四层', 'settings', 'POC', '价格待验证'],
       ['退订取回窗口', 'settings', 'POC', '假面'],
       ['E2EE 媒体保险箱路径', 'media', 'TODO', '待真实加密文件库'],
+      ['"我也是"感受标签微仪式', 'today', 'PASS', '回访追加感受后可跳过标签步骤'],
+      ['纯感受卡分享（零可识别信息）', 'today', 'PASS', 'canvas 只含抽象词+水印'],
+      ['重逢报告感受维度', 'settings', 'PASS', 'topFeelingTag stat 卡'],
     ];
     const pass = checks.filter(c => c[2] === 'PASS').length;
     const poc = checks.filter(c => c[2] === 'POC').length;
