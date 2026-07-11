@@ -4,6 +4,31 @@
    主交付：今日回访（被带回过去），非今日切片（生产新内容）
    ============================================================ */
 
+// ---------- 全局错误捕获（参 ZCode · TestFlight 真机调试必备）----------
+// 守"数据不丢/可带走"：运行时错误/未捕获 Promise rejection 落 localStorage，
+// 设置页可导出，方便 TestFlight beta 用户把真机崩溃栈带回来。50 条上限、msg/stack 截断防爆。
+(function() {
+  const LOG_KEY = 'tsd-cc-error-log';
+  const MAX_LOGS = 50;
+  function logError(type, msg, url, line, col, stack) {
+    try {
+      const entry = { t: Date.now(), type, msg: String(msg).substring(0, 300), url: url ? String(url).substring(0, 100) : '', line, col, stack: stack ? String(stack).substring(0, 500) : '' };
+      const raw = localStorage.getItem(LOG_KEY);
+      const logs = raw ? JSON.parse(raw) : [];
+      logs.unshift(entry);
+      if (logs.length > MAX_LOGS) logs.length = MAX_LOGS;
+      localStorage.setItem(LOG_KEY, JSON.stringify(logs));
+    } catch(e) {}
+  }
+  window.addEventListener('error', e => logError('error', e.message, e.filename, e.lineno, e.colno, e.error && e.error.stack));
+  window.addEventListener('unhandledrejection', e => logError('promise', e.reason && (e.reason.message || e.reason), '', 0, 0, e.reason && e.reason.stack));
+  window.__tsdExportErrorLog = function() {
+    const raw = localStorage.getItem(LOG_KEY);
+    return raw ? JSON.parse(raw) : [];
+  };
+  window.__tsdClearErrorLog = function() { localStorage.removeItem(LOG_KEY); };
+})();
+
 const App = (() => {
   const $ = (s, el = document) => el.querySelector(s);
   const $$ = (s, el = document) => [...el.querySelectorAll(s)];
@@ -1238,6 +1263,17 @@ const App = (() => {
       el('div', { class: 'card' }, [
         el('div', { class: 'setting-row', onclick: () => openTrialGuide(navigate) }, [el('div', { class: 'setting-row__main' }, [el('div', { class: 'setting-row__title' }, ['试用指南']), el('div', { class: 'setting-row__sub' }, ['3 分钟体验路线、当前可点能力'])]), el('div', { class: 'list-row__right' }, ['▸'])]),
         el('div', { class: 'setting-row', onclick: () => navigate('qa') }, [el('div', { class: 'setting-row__main' }, [el('div', { class: 'setting-row__title' }, ['Demo QA Console']), el('div', { class: 'setting-row__sub' }, ['PASS/POC/TODO 计分与验收路线'])]), el('div', { class: 'list-row__right' }, ['▸'])]),
+        // 错误日志导出（参 ZCode · TestFlight 真机调试必备）：把运行时错误栈导出为 JSON 下载
+        el('div', { class: 'setting-row', onclick: () => {
+          const logs = window.__tsdExportErrorLog ? window.__tsdExportErrorLog() : [];
+          if (!logs.length) { toast('暂无错误日志'); return; }
+          const blob = new Blob([JSON.stringify(logs, null, 2)], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          const a = el('a', { href: url, download: 'tsd-error-log-' + Date.now() + '.json' });
+          document.body.appendChild(a); a.click(); a.remove();
+          URL.revokeObjectURL(url);
+          toast('已导出 ' + logs.length + ' 条错误日志');
+        } }, [el('div', { class: 'setting-row__main' }, [el('div', { class: 'setting-row__title' }, ['导出错误日志']), el('div', { class: 'setting-row__sub' }, ['运行时错误栈 · TestFlight 反馈用 · ' + (window.__tsdExportErrorLog ? window.__tsdExportErrorLog().length : 0) + ' 条'])]), el('div', { class: 'list-row__right' }, ['▸'])]),
       ]),
 
       el('div', { class: 'section-title' }, ['未来的信']),

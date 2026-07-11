@@ -47,8 +47,12 @@
 	<false/>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>TSD 需要选择旧照片作为回访入口——把你带回过去的瞬间。照片仅存于本机，不上传任何服务器。</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>用于把重逢卡、人生蒙太奇等分享成品保存到你的相册。仅在你主动保存时写入，不上传。</string>
 	<key>NSCameraUsageDescription</key>
 	<string>用于在留下瞬间时拍摄一张照片作为未来的回访入口。仅本机存储，不上传。</string>
+	<key>UIRequiresFullScreen</key>
+	<true/>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.lifestyle</string>
 </dict>
