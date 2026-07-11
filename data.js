@@ -254,6 +254,65 @@ const TSD = (() => {
     save();
     return m;
   }
+  // 删除单个瞬间 —— 级联清理回访/引子/胶囊，但生成墓碑支持会话内撤销（守"数据不丢"铁律）
+  // 复用 softDelete 的 localStorage 墓碑模式，独立 key（单瞬间墓碑与全清墓碑互不干扰，至多各 1 条）
+  const MOMENT_TOMB_KEY = KEY + '-moment-tomb';
+  function deleteMoment(id) {
+    const m = getMoment(id);
+    if (!m) return false;
+    const myRevisits = state.revisits.filter(r => r.momentId === id);
+    const myCapsules = (state.capsules || []).filter(c => c.momentId === id);
+    const snapshot = JSON.parse(JSON.stringify({ moment: m, revisits: myRevisits, capsules: myCapsules }));
+    try { localStorage.setItem(MOMENT_TOMB_KEY, JSON.stringify({ savedAt: Date.now(), data: snapshot })); } catch (e) {}
+    // 级联清理
+    state.moments = state.moments.filter(x => x.id !== id);
+    state.revisits = state.revisits.filter(r => r.momentId !== id);
+    if (state.capsules) state.capsules = state.capsules.filter(c => c.momentId !== id);
+    save();
+    return true;
+  }
+  // 恢复刚删除的瞬间（墓碑回灌，避免 id 冲突）
+  function restoreDeletedMoment() {
+    try {
+      const raw = localStorage.getItem(MOMENT_TOMB_KEY);
+      if (!raw) return false;
+      const s = JSON.parse(raw).data;
+      if (s.moment && !state.moments.find(x => x.id === s.moment.id)) state.moments.unshift(s.moment);
+      if (s.revisits) s.revisits.forEach(r => { if (!state.revisits.find(x => x.id === r.id)) state.revisits.push(r); });
+      if (s.capsules && state.capsules) s.capsules.forEach(c => { if (!state.capsules.find(x => x.id === c.id)) state.capsules.push(c); });
+      localStorage.removeItem(MOMENT_TOMB_KEY);
+      save();
+      return true;
+    } catch (e) { return false; }
+  }
+  function hasMomentTombstone() { try { return !!localStorage.getItem(MOMENT_TOMB_KEY); } catch (e) { return false; } }
+  function clearMomentTombstone() { try { localStorage.removeItem(MOMENT_TOMB_KEY); } catch (e) {} }
+
+  // 搜索瞬间 —— 全文模糊匹配 quote/people/place/tags，返回打分排序结果
+  // 商品级必需（Day One 核心）：瞬间变多后用户需要"找回那个关于爸爸的"
+  function searchMoments(q) {
+    const query = (q || '').trim().toLowerCase();
+    if (!query) return [];
+    const tokens = query.split(/\s+/).filter(Boolean);
+    const scored = [];
+    state.moments.forEach(m => {
+      let score = 0;
+      const quote = (m.quote || '').toLowerCase();
+      const people = (m.people || []).join(' ').toLowerCase();
+      const place = (m.place || '').toLowerCase();
+      const tags = (m.tags || []).join(' ').toLowerCase();
+      const whenText = (m.when && m.when.text || '').toLowerCase();
+      tokens.forEach(t => {
+        if (quote.includes(t)) score += 3;
+        if (people.includes(t)) score += 4;
+        if (place.includes(t)) score += 2;
+        if (tags.includes(t)) score += 2;
+        if (whenText.includes(t)) score += 1;
+      });
+      if (score > 0) scored.push({ m, score });
+    });
+    return scored.sort((a, b) => b.score - a.score).map(o => o.m);
+  }
 
   // ---------- revisits ----------
   function getRevisits(momentId) {
@@ -647,7 +706,9 @@ const TSD = (() => {
     reset: () => { state = freshState(); save(); },
     init,
     raw: () => state,
-    getMoments, getMoment, addMoment, updateMoment,
+    getMoments, getMoment, addMoment, updateMoment, deleteMoment,
+    restoreDeletedMoment, hasMomentTombstone, clearMomentTombstone,
+    searchMoments,
     getRevisits, getRevisitCount, addRevisit, thickness,
     setThread, clearThread, activeThread,
     pickEcho, weekRevisits, weekRevisitStats, ninetyDayStats,

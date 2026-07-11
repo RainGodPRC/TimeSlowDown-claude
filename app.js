@@ -36,6 +36,7 @@ const App = (() => {
     const top = el('div', { class: 'topbar' }, [
       el('div', { class: 'topbar__title' }, [document.createTextNode('TimeSlowDown')]),
       el('div', { class: 'topbar__right' }, [
+        el('button', { class: 'btn btn--sm btn--ghost', onclick: () => navigate('search'), 'aria-label': '搜索瞬间' }, ['⌕']),
         el('button', { class: 'btn btn--sm btn--ghost', onclick: () => navigate('settings'), 'aria-label': '设置' }, ['⚙︎']),
       ]),
     ]);
@@ -109,7 +110,7 @@ const App = (() => {
 
   let toastTimer;
   function toast(msg) {
-    let t = $('.toast');
+    let t = $('.toast:not(.toast--undo)');
     if (!t) { t = el('div', { class: 'toast' }); document.body.appendChild(t); }
     t.textContent = msg;
     t.classList.add('is-show');
@@ -176,6 +177,7 @@ const App = (() => {
           '让记忆在反复回访里变厚。'
         ]),
         el('button', { class: 'btn btn--primary btn--lg btn--block', onclick: next }, ['开始第一次回访']),
+        el('button', { class: 'btn btn--ghost btn--block mt-3', style: 'font-size:13px;color:var(--fg-mute);', onclick: finish }, ['先逛逛，之后再设置']),
       ]),
       // 1: 自造第一个瞬间（D-A1：60 秒内自造正峰，让回访演示用用户自己的内容）
       () => el('div', { class: 'text-center', style: 'padding-top:10vh;' }, [
@@ -469,7 +471,6 @@ const App = (() => {
   function milestoneCard() {
     const unlocked = TSD.getAchievements().filter(a => a.unlocked);
     return el('div', { class: 'card', onclick: () => navigate('imprints'), 'aria-label': '查看全部重逢印记' }, [
-      el('div', { class: 'section-title', style: 'margin:0 0 12px;' }, ['重逢印记']),
       el('div', { style: 'display:flex;flex-wrap:wrap;gap:14px;align-items:flex-start;' }, [
         ...unlocked.map(a => imprintTile(a, false)),
         el('div', { style: 'display:flex;flex-direction:column;align-items:center;width:52px;opacity:.5;' }, [
@@ -529,6 +530,8 @@ const App = (() => {
       el('div', { class: 'text-center mt-5', id: 'timer-wrap' }, [
         ringPct(0, '10'),
         el('div', { class: 'muted', style: 'font-size:12px;margin-top:8px;' }, ['秒后可以补一句"现在再看"']),
+        // 守硬上限但尊重峰终：10 秒到点后出现"再停留 10 秒"（最多 1 次加时，防沉迷）
+        el('button', { class: 'btn btn--ghost btn--sm mt-3', id: 'extend-btn', style: 'display:none;', onclick: () => extendOnce() }, ['再停留一会儿']),
       ]),
 
       // 追加感受（10秒后激活）
@@ -555,6 +558,37 @@ const App = (() => {
     const ringFill = $('.ring__fill', view);
     const ringLabel = $('.ring__label', view);
     const c = 2 * Math.PI * 26;
+    let extended = false;
+    function extendOnce() {
+      if (extended || !finished) return;
+      extended = true;
+      finished = false;
+      secondsLeft = 10;
+      const eb = $('#extend-btn', view);
+      if (eb) eb.style.display = 'none';
+      // 禁用感受输入，回到"只沉浸"态
+      $('#feeling-input', view).disabled = true;
+      $('#save-feeling', view).disabled = true;
+      $('#thread-check', view).disabled = true;
+      if (ringLabel) ringLabel.textContent = '10';
+      timerInt = setInterval(() => {
+        secondsLeft--;
+        const elapsed = 10 - secondsLeft;
+        if (ringFill) {
+          ringFill.setAttribute('stroke-dashoffset', String(c * (1 - elapsed / 10)));
+          ringLabel.textContent = String(Math.max(secondsLeft, 0));
+        }
+        if (secondsLeft <= 0 && !finished) {
+          finished = true;
+          clearInterval(timerInt);
+          $('#feeling-input', view).disabled = false;
+          $('#save-feeling', view).disabled = false;
+          $('#thread-check', view).disabled = false;
+          ringLabel.textContent = '✓';
+        }
+      }, 1000);
+      haptic('impact');
+    }
     timerInt = setInterval(() => {
       secondsLeft--;
       const elapsed = 10 - secondsLeft;
@@ -569,6 +603,9 @@ const App = (() => {
         $('#save-feeling', view).disabled = false;
         $('#thread-check', view).disabled = false;
         ringLabel.textContent = '✓';
+        // 显示"再停留"按钮（最多加时 1 次）
+        const eb = $('#extend-btn', view);
+        if (eb && !extended) eb.style.display = '';
         toast('可以补一句了，也可以不补');
       }
     }, 1000);
@@ -659,6 +696,9 @@ const App = (() => {
       el('button', { class: 'btn btn--ghost btn--block mt-3', onclick: () => openSealSheet(m) }, ['封存给未来的自己 ✉']),
       el('button', { class: 'btn btn--ghost btn--block mt-3', onclick: () => openTellOneSheet(m) }, ['讲给一个人听 ✉']),
       el('button', { class: 'btn btn--ghost btn--block mt-3', onclick: () => openShareSheet(m, revs, navigate) }, ['分享这一刻']),
+      el('div', { class: 'divider' }),
+      el('button', { class: 'btn btn--ghost btn--block mt-3', onclick: () => openEditMomentSheet(m, navigate) }, ['编辑这一刻']),
+      el('button', { class: 'btn btn--ghost btn--block mt-3', style: 'color:var(--danger);', onclick: () => openDeleteMomentSheet(m, navigate) }, ['删除这一刻']),
     ]));
     $('#moment-photo', view).addEventListener('change', async (e) => {
       const f = e.target.files[0];
@@ -1025,7 +1065,7 @@ const App = (() => {
 
       el('div', { class: 'section-title' }, ['外观']),
       el('div', { class: 'card' }, [
-        el('div', { class: 'setting-row' }, [el('div', { class: 'setting-row__main' }, [el('div', { class: 'setting-row__title' }, ['深色模式']), el('div', { class: 'setting-row__sub' }, [s.settings.darkMode === 'auto' ? '跟随系统' : s.settings.darkMode])]), el('button', { class: 'btn btn--sm btn--ghost', onclick: () => { TSD.setSetting('darkMode', s.settings.darkMode === 'auto' ? 'dark' : 'auto'); location.reload(); } }, ['切换'])]),
+        el('div', { class: 'setting-row' }, [el('div', { class: 'setting-row__main' }, [el('div', { class: 'setting-row__title' }, ['深色模式']), el('div', { class: 'setting-row__sub' }, [{ auto: '跟随系统', dark: '始终深色', light: '始终浅色' }[s.settings.darkMode || 'auto']])]), el('button', { class: 'btn btn--sm btn--ghost', onclick: () => { const cycle = { auto: 'dark', dark: 'light', light: 'auto' }; const next = cycle[s.settings.darkMode || 'auto']; TSD.setSetting('darkMode', next); applyTheme(next); navigate('settings'); } }, ['切换'])]),
         el('div', { class: 'setting-row' }, [el('div', { class: 'setting-row__main' }, [el('div', { class: 'setting-row__title' }, ['减少动效']), el('div', { class: 'setting-row__sub' }, ['降低动画与过渡'])]), el('button', { class: 'switch' + (s.settings.reducedMotion ? ' is-on' : ''), onclick: () => { TSD.setSetting('reducedMotion', !s.settings.reducedMotion); document.body.style.transition = 'none'; navigate('settings'); } }, [])]),
       ]),
 
@@ -1099,6 +1139,12 @@ const App = (() => {
       ['"我也是"感受标签微仪式', 'today', 'PASS', '回访追加感受后可跳过标签步骤'],
       ['纯感受卡分享（零可识别信息）', 'today', 'PASS', 'canvas 只含抽象词+水印'],
       ['重逢报告感受维度', 'settings', 'PASS', 'topFeelingTag stat 卡'],
+      ['全局搜索瞬间', 'search', 'PASS', 'topbar ⌕ 入口，按原话/人物/地点/标签'],
+      ['编辑瞬间（正文/人物/地点/类型/时间）', 'moment/m-seed-01', 'PASS', 'moment 路由底部"编辑这一刻"'],
+      ['删除瞬间（二次确认+会话内撤销）', 'moment/m-seed-01', 'PASS', '墓碑回灌，5秒撤销'],
+      ['onboarding 跳过逃生口', 'onboarding', 'PASS', '承诺页"先逛逛"'],
+      ['主题三态平滑切换（无 reload）', 'settings', 'PASS', 'auto/dark/light data-theme'],
+      ['回访加时（再停留 10 秒，最多 1 次）', 'revisit/m-seed-01', 'PASS', '守硬上限+尊重峰终'],
     ];
     const pass = checks.filter(c => c[2] === 'PASS').length;
     const poc = checks.filter(c => c[2] === 'POC').length;
@@ -1157,6 +1203,77 @@ const App = (() => {
   });
 
   // ============================================================
+  // 视图：search 搜索瞬间（Day One 级核心功能）
+  // ============================================================
+  route('search', ({ view, navigate }) => {
+    const all = TSD.getMoments();
+    view.appendChild(el('div', {}, [
+      el('h2', { class: 'h2 mb-3' }, ['找一个瞬间']),
+      el('p', { class: 'muted mb-4', style: 'font-size:13px;' }, ['按原话、人物、地点、标签搜索。']),
+      el('input', {
+        id: 'search-input',
+        type: 'search',
+        placeholder: '比如：爸爸、面馆、跑步…',
+        style: 'width:100%;padding:14px 16px;background:var(--bg-elev);border:1px solid var(--line-strong);border-radius:14px;font-size:16px;margin-bottom:20px;',
+        autocomplete: 'off',
+      }),
+      el('div', { id: 'search-results' }),
+      el('div', { id: 'search-hint', class: 'muted', style: 'font-size:12px;line-height:1.6;' }, all.length ? ['共 ' + all.length + ' 个瞬间。输入关键词开始搜索。'] : ['还没有瞬间。先留下一个吧。']),
+    ]));
+
+    const input = $('#search-input', view);
+    const resultsBox = $('#search-results', view);
+    const hint = $('#search-hint', view);
+
+    const renderResults = (q) => {
+      resultsBox.innerHTML = '';
+      if (!q) {
+        if (all.length >= 4) {
+          // 无搜索词时：展示最近 6 个瞬间（Day One 式最近列表）
+          const recent = all.slice(0, 6);
+          resultsBox.appendChild(el('div', { class: 'section-title', style: 'margin-top:0;' }, ['最近的瞬间']));
+          resultsBox.appendChild(el('div', { class: 'card' }, recent.map(m =>
+            el('div', { class: 'list-row', onclick: () => navigate('moment/' + m.id) }, [
+              el('div', { class: 'list-row__icon', style: thicknessColor(m.id) }, [TSD.thickness(m.id) === 'thick' ? '◈' : '○']),
+              el('div', { class: 'list-row__main' }, [
+                el('div', { class: 'list-row__title serif', style: 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;' }, ['"' + truncate(m.quote, 26) + '"']),
+                el('div', { class: 'list-row__sub' }, [(m.when && m.when.text) || '某天'] + ' · ' + fmtRelative(m.createdAt)),
+              ]),
+              el('div', { class: 'list-row__right' }, ['▸']),
+            ])
+          )));
+        }
+        return;
+      }
+      const found = TSD.searchMoments(q);
+      if (!found.length) {
+        resultsBox.appendChild(el('div', { class: 'card muted text-center', style: 'font-size:13px;' }, ['没有匹配的瞬间。换个词试试？']));
+        return;
+      }
+      resultsBox.appendChild(el('div', { class: 'section-title', style: 'margin-top:0;' }, ['找到 ' + found.length + ' 个']));
+      resultsBox.appendChild(el('div', { class: 'card' }, found.map(m =>
+        el('div', { class: 'list-row', onclick: () => navigate('moment/' + m.id) }, [
+          el('div', { class: 'list-row__icon', style: thicknessColor(m.id) }, [TSD.thickness(m.id) === 'thick' ? '◈' : '○']),
+          el('div', { class: 'list-row__main' }, [
+            el('div', { class: 'list-row__title serif', style: 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;' }, ['"' + truncate(m.quote, 26) + '"']),
+            el('div', { class: 'list-row__sub' }, [(m.when && m.when.text) || '某天'] + (m.people && m.people.length ? ' · ' + m.people.join('、') : '')),
+          ]),
+          el('div', { class: 'list-row__right' }, ['▸']),
+        ])
+      )));
+    };
+
+    input.addEventListener('input', () => {
+      const q = input.value.trim();
+      renderResults(q);
+      if (q) hint.textContent = '';
+      else hint.textContent = all.length ? '共 ' + all.length + ' 个瞬间。输入关键词开始搜索。' : '还没有瞬间。先留下一个吧。';
+    });
+    renderResults('');
+    setTimeout(() => input.focus(), 100);
+  });
+
+  // ============================================================
   // 视图：capture 留下新瞬间（可选，非主交付）
   // ============================================================
   route('capture', ({ view, navigate }) => {
@@ -1180,6 +1297,8 @@ const App = (() => {
       ]),
       el('div', { class: 'section-title' }, ['人物（逗号分隔，可选）']),
       el('input', { id: 'cap-people', placeholder: '比如：爸爸, 老朋友', style: 'width:100%;padding:12px;background:var(--bg-elev);border:1px solid var(--line-strong);border-radius:10px;margin-bottom:16px;' }),
+      el('div', { class: 'section-title' }, ['地点（可选）']),
+      el('input', { id: 'cap-place', placeholder: '比如：面馆、阳台、公园', style: 'width:100%;padding:12px;background:var(--bg-elev);border:1px solid var(--line-strong);border-radius:10px;margin-bottom:16px;' }),
       el('div', { class: 'section-title' }, ['影像（可选 · 回访入口）']),
       el('input', { type: 'file', accept: 'image/*', id: 'cap-photo', style: 'display:none;' }),
       el('div', { id: 'cap-photo-preview' }),
@@ -1192,7 +1311,8 @@ const App = (() => {
           const kindEl = $$('#cap-kind .chip').find(c => c.className.includes('chip--'));
           const kind = kindEl ? kindEl.getAttribute('data-k') : 'grass';
           const people = $('#cap-people').value.split(',').map(s => s.trim()).filter(Boolean);
-          TSD.addMoment({ quote: q, kind, people, media: pendingMedia, when: { precision: 'day', text: '今天', start: Math.floor(Date.now()/1000) } });
+          const place = $('#cap-place').value.trim() || null;
+          TSD.addMoment({ quote: q, kind, people, place, media: pendingMedia, when: { precision: 'day', text: '今天', start: Math.floor(Date.now()/1000) } });
           TSD.logAiTask({ type: 'T0', payload: { action: 'extract', quote: q, hasMedia: !!pendingMedia }, result: '本地结构抽取，未上传', localOnly: true });
           toast('已留住。它会在某天被带回给你。');
           navigate('today');
@@ -1308,7 +1428,12 @@ const App = (() => {
           el('div', { class: 'muted', style: 'font-size:13px;margin-top:8px;' }, ['将在 ' + new Date(c.unlockAt).toLocaleDateString('zh-CN') + ' 解锁（约 ' + days + ' 天后）']),
           el('div', { class: 'muted', style: 'font-size:11px;margin-top:6px;' }, ['内容暂不可见——让未来的你有一个惊喜。']),
         ]);
-      })) : el('div', { class: 'card text-center muted', style: 'font-size:13px;' }, ['还没有封存任何信。打开一个瞬间，"封存给未来的自己"。']),
+      })) : el('div', { class: 'card text-center muted', style: 'font-size:13px;padding:28px 20px;' }, [
+        el('div', { style: 'font-size:36px;margin-bottom:10px;' }, ['✉']),
+        el('div', { class: 'serif', style: 'font-size:15px;color:var(--fg-soft);margin-bottom:6px;' }, ['还没有封存任何信']),
+        el('div', { style: 'margin-bottom:18px;' }, ['打开一个瞬间，"封存给未来的自己"。']),
+        el('button', { class: 'btn btn--primary', onclick: () => navigate('today') }, ['去看看今天的回声']),
+      ]),
       el('p', { class: 'muted mt-5', style: 'font-size:11px;text-align:center;' }, ['参 FutureMe；解锁瞬间是 TSD 最强的"重逢"——也是你最想分享的时刻。']),
     ]));
   });
@@ -1524,6 +1649,85 @@ const App = (() => {
     const cv = renderRevisitCard(m, revs);
     cardSlot.appendChild(el('img', { src: cv.toDataURL('image/png'), style: 'width:100%;border-radius:14px;box-shadow:0 8px 30px rgba(0,0,0,.45);', alt: '重逢卡预览' }));
     return s;
+  }
+
+  // ---------- 编辑瞬间 sheet（商品级必需：用户能改正文/人物/地点/类型/时间）----------
+  // 守"AI 不改写过去"铁律：这里是用户亲自改，非 AI 改；保留 createdAt，不改 id。
+  function openEditMomentSheet(m, navigate) {
+    const content = el('div', {}, [
+      el('h3', { class: 'h3 mb-3' }, ['编辑这一刻']),
+      el('p', { class: 'muted mb-4', style: 'font-size:13px;line-height:1.5;' }, ['这是你亲自修改，不是 AI 改写。原话始终归你。']),
+      el('label', { class: 'field-label' }, ['原话']),
+      el('textarea', { id: 'edit-quote', style: 'width:100%;min-height:90px;padding:14px;background:var(--bg-elev);border:1px solid var(--line-strong);border-radius:14px;font-size:15px;font-family:var(--font-serif);resize:none;margin-bottom:16px;' }, [m.quote]),
+      el('label', { class: 'field-label' }, ['人物（逗号分隔）']),
+      el('input', { id: 'edit-people', value: (m.people || []).join(', '), placeholder: '比如：爸爸, 老朋友', style: 'width:100%;padding:12px;background:var(--bg-elev);border:1px solid var(--line-strong);border-radius:10px;margin-bottom:16px;' }),
+      el('label', { class: 'field-label' }, ['地点']),
+      el('input', { id: 'edit-place', value: m.place || '', placeholder: '比如：面馆', style: 'width:100%;padding:12px;background:var(--bg-elev);border:1px solid var(--line-strong);border-radius:10px;margin-bottom:16px;' }),
+      el('label', { class: 'field-label' }, ['那时候（文字描述）']),
+      el('input', { id: 'edit-when', value: (m.when && m.when.text) || '', placeholder: '比如：去年秋天某个周六', style: 'width:100%;padding:12px;background:var(--bg-elev);border:1px solid var(--line-strong);border-radius:10px;margin-bottom:16px;' }),
+      el('label', { class: 'field-label' }, ['类型']),
+      el('div', { class: 'flex gap-2 mb-4', id: 'edit-kind' }, [
+        ...[['grass','日常'],['bloom','高光'],['night','平淡']].map(([k, l]) =>
+          el('button', { class: 'chip' + (m.kind === k ? ' chip--' + (k === 'bloom' ? 'bloom' : k === 'night' ? 'night' : 'growth') : ''), 'data-k': k, onclick: (e) => {
+            $$('#edit-kind .chip').forEach(c => { c.className = 'chip'; });
+            e.target.className = 'chip chip--' + (k === 'bloom' ? 'bloom' : k === 'night' ? 'night' : 'growth');
+          } }, [l]))
+      ]),
+      el('div', { class: 'flex gap-3' }, [
+        el('button', { class: 'btn btn--ghost btn--lg', style: 'flex:1', onclick: () => { const s = document.querySelector('.sheet'); if (s && s._close) s._close(); } }, ['取消']),
+        el('button', { class: 'btn btn--primary btn--lg', style: 'flex:1', onclick: () => {
+          const quote = $('#edit-quote').value.trim();
+          if (!quote) { toast('原话不能为空'); return; }
+          const people = $('#edit-people').value.split(',').map(s => s.trim()).filter(Boolean);
+          const place = $('#edit-place').value.trim() || null;
+          const whenText = $('#edit-when').value.trim();
+          const kindEl = $$('#edit-kind .chip').find(c => c.className.includes('chip--'));
+          const kind = kindEl ? kindEl.getAttribute('data-k') : m.kind;
+          const patch = { quote, people, place, kind };
+          if (whenText) patch.when = Object.assign({}, m.when, { text: whenText });
+          TSD.updateMoment(m.id, patch);
+          // 记录 AI 任务账本（T0 结构抽取：用户手工修订视为本地结构更新）
+          TSD.logAiTask({ type: 'T0', payload: { action: 'user_edit', momentId: m.id }, result: '用户亲自修订，未上传', localOnly: true });
+          haptic('success');
+          toast('已更新这一刻');
+          const s = document.querySelector('.sheet'); if (s && s._close) s._close();
+          navigate('moment/' + m.id);
+        } }, ['保存']),
+      ]),
+    ]);
+    sheet(content);
+  }
+
+  // ---------- 删除瞬间 sheet（商品级必需：二次确认 + 会话内撤销墓碑）----------
+  function openDeleteMomentSheet(m, navigate) {
+    const revCount = TSD.getRevisitCount(m.id);
+    const content = el('div', {}, [
+      el('h3', { class: 'h3 mb-3', style: 'color:var(--danger);' }, ['删除这一刻？']),
+      el('p', { class: 'muted mb-4', style: 'font-size:13px;line-height:1.6;' }, [
+        '这一刻连同它的 ', el('strong', { style: 'color:var(--fg);' }, [String(revCount)]), ' 次回访记录都会被移除。',
+        el('br'), '删除后可在本次会话内撤销（墓碑会保留一段时间）。',
+      ]),
+      el('div', { class: 'serif', style: 'font-size:15px;color:var(--fg-soft);background:var(--bg-elev);padding:14px;border-radius:12px;margin-bottom:16px;line-height:1.5;' }, ['"' + m.quote + '"']),
+      el('div', { class: 'flex gap-3' }, [
+        el('button', { class: 'btn btn--ghost btn--lg', style: 'flex:1', onclick: () => { const s = document.querySelector('.sheet'); if (s && s._close) s._close(); } }, ['保留']),
+        el('button', { class: 'btn btn--lg', style: 'flex:1;background:var(--danger);color:#fff;border:none;', onclick: () => {
+          TSD.deleteMoment(m.id);
+          haptic('impact');
+          const s = document.querySelector('.sheet'); if (s && s._close) s._close();
+          const t = el('div', { class: 'toast toast--undo is-show', role: 'status', 'aria-live': 'polite' }, [
+            el('span', {}, ['已删除这一刻']),
+            el('button', { class: 'btn btn--sm', style: 'color:var(--accent);background:transparent;border:none;font-size:13px;font-weight:600;', onclick: () => {
+              if (TSD.restoreDeletedMoment()) { toast('已恢复'); navigate('moment/' + m.id); }
+              else toast('恢复失败'); t.remove();
+            } }, ['撤销']),
+          ]);
+          document.body.appendChild(t);
+          setTimeout(() => t.remove(), 5500);
+          navigate('today');
+        } }, ['确认删除']),
+      ]),
+    ]);
+    sheet(content);
   }
 
   // ---------- 试用指南 sheet ----------
@@ -1898,9 +2102,22 @@ const App = (() => {
     });
   }
 
+  // ---------- 主题应用（三态：auto/dark/light，无 reload 平滑切换）----------
+  function applyTheme(mode) {
+    const root = document.documentElement;
+    if (mode === 'dark') root.setAttribute('data-theme', 'dark');
+    else if (mode === 'light') root.setAttribute('data-theme', 'light');
+    else root.removeAttribute('data-theme'); // auto = 跟随系统
+    // 同步 theme-color meta（影响 Safari 地址栏 / 状态栏配色）
+    const dark = '#0f1014', light = '#f7f4ef';
+    const isDark = mode === 'dark' || (mode !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
+    $$('meta[name="theme-color"]').forEach(m => m.setAttribute('content', isDark ? dark : light));
+  }
+
   // ---------- 启动 ----------
   async function start() {
     await TSD.init();
+    applyTheme(TSD.raw().settings && TSD.raw().settings.darkMode || 'auto');
     TSD.checkAchievements(); // 启动静默解锁已达成成就（不在启动时 toast，避免噪音）
     haptic('impact'); // 入场触觉（D-B1）：建立"进入仪式空间"的条件反射（native 生效，web 静默）
     const newCaps = TSD.checkCapsuleUnlocks(); // 时间胶囊解锁检查（C-A）
