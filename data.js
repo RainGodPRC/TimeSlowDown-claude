@@ -832,6 +832,44 @@ const TSD = (() => {
     return { lived: weeks, total: 52 * 90, current: weeks };
   }
 
+  // ---------- Widget 状态（Finch 式 home-screen 活体存在）----------
+  // 守原则5：badge/图标点只表"有/无新回声"，永不显示"漏了 X 天"/计数器/红点焦虑
+  // 守原则9：widget 模式是 home-screen 入口的超精简单屏（echo 缩略 + 留半句提示），不延长会话
+  // 活体演化：晨=今日回声缩略，夜=留半句给明天（Zeigarnik）提示
+  function widgetState() {
+    const today = new Date(); today.setHours(0,0,0,0);
+    const todayMs = today.getTime();
+    const revisitedToday = state.revisits.some(r => r.at >= todayMs);
+    const echo = state.moments.find(m => m.id === state.lastEchoMomentId) || null;
+    const thread = activeThread();
+    const hr = new Date().getHours();
+    // 时段态：晨(6-11) / 午(12-17) / 夜(18-23) / 深(0-5)
+    const phase = hr < 6 ? 'deep' : hr < 12 ? 'morning' : hr < 18 ? 'afternoon' : 'evening';
+    return {
+      // badge 用：有没有新回声待看（只 0/1，绝不计数）
+      hasNewEcho: !revisitedToday && !!echo,
+      revisitedToday,
+      echo: echo ? { id: echo.id, quote: echo.quote, kind: echo.kind, media: echo.media } : null,
+      thread: thread ? { text: thread.thread.text, momentId: thread.moment.id } : null,
+      phase,
+      // widget 演化主文案（Spark 式，永不 loss-frame）
+      headline: revisitedToday
+        ? '今天已重逢'
+        : (echo ? '有一个旧瞬间想再见你' : '还没有可回访的瞬间'),
+      sub: thread
+        ? '昨天留了半句，今天续上？'
+        : (revisitedToday ? '明天还会有一个' : (echo ? '点开待 10 秒' : '先留下一个瞬间')),
+    };
+  }
+
+  // Badge API 用：返回 home-screen 图标点应显示的状态
+  // 守原则5：返回 { level: 0|1, dot: false|true }，绝不返回数字计数
+  function badgeState() {
+    const w = widgetState();
+    // 只在"今天还没回访 且 有回声"时显示一个安静的点
+    return { level: w.hasNewEcho ? 1 : 0, dot: w.hasNewEcho };
+  }
+
   return {
     reset: () => { state = freshState(); save(); },
     init,
@@ -849,6 +887,7 @@ const TSD = (() => {
     addCapsule, getCapsules, checkCapsuleUnlocks, markCapsuleViewed,
     reportStats,
     exportData, clearAll, lifeWeeks,
+    widgetState, badgeState,
     makePackage, importPackage, applyImport,
     softDelete, hasTombstone, restoreTombstone, clearTombstone,
     onThisDay,

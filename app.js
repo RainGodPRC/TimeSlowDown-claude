@@ -368,6 +368,37 @@ const App = (() => {
     );
   });
 
+  // ============================================================
+  // 视图：widget 模式（home-screen 入口超精简单屏 · Finch 式活体存在）
+  // 从 home-screen widget 启动（?from=widget）→ 单屏 echo 缩略 + 留半句提示
+  // 守原则5/9：不延长会话；点"带回"进完整 revisit，点"关"即退回主屏
+  // ============================================================
+  route('widget', ({ view, navigate }) => {
+    if (!TSD.raw().onboarded) { navigate('onboarding', { replace: true }); return; }
+    const w = TSD.widgetState();
+    view.appendChild(el('div', { class: 'widget-view' }, [
+      el('div', { class: 'widget-view__label muted' }, [w.phase === 'morning' ? '晨 · 今天' : w.phase === 'afternoon' ? '午 · 今天' : w.phase === 'evening' ? '夜 · 今天' : '深夜 · 今天']),
+      el('div', { class: 'widget-view__headline serif' }, [w.headline]),
+      el('div', { class: 'widget-view__sub muted' }, [w.sub]),
+      // echo 缩略（若有）—— 仅一行原话截断，无媒体（守最小暴露面）
+      w.echo ? el('div', { class: 'widget-view__echo serif' }, ['"' + truncate(w.echo.quote, 28) + '"']) : null,
+      // 留半句提示（若有 Zeigarnik 引子）
+      w.thread ? el('div', { class: 'widget-view__thread' }, [
+        el('div', { class: 'muted', style: 'font-size:11px;' }, ['昨天留了半句：']),
+        el('div', { class: 'serif', style: 'font-size:13px;color:var(--fg-soft);line-height:1.4;' }, ['"' + truncate(w.thread.text, 30) + '"']),
+      ]) : null,
+      el('div', { class: 'widget-view__actions' }, [
+        w.echo && !w.revisitedToday
+          ? el('button', { class: 'btn btn--primary btn--lg btn--block', onclick: () => navigate('revisit/' + w.echo.id) }, ['带回这一刻'])
+          : null,
+        w.revisitedToday
+          ? el('div', { class: 'muted', style: 'text-align:center;font-size:13px;' }, ['今天已重逢。明天还会有一个。'])
+          : null,
+        el('button', { class: 'btn btn--ghost btn--sm btn--block', onclick: () => navigate('today') }, ['打开 TSD']),
+      ]),
+    ]));
+  });
+
   function nowLabel() {
     const h = new Date().getHours();
     const d = new Date().getDay();
@@ -1151,6 +1182,22 @@ const App = (() => {
         el('div', { class: 'setting-row' }, [el('div', { class: 'setting-row__main' }, [el('div', { class: 'setting-row__title' }, ['减少动效']), el('div', { class: 'setting-row__sub' }, ['降低动画与过渡'])]), el('button', { class: 'switch' + (s.settings.reducedMotion ? ' is-on' : ''), onclick: () => { TSD.setSetting('reducedMotion', !s.settings.reducedMotion); document.body.style.transition = 'none'; navigate('settings'); } }, [])]),
       ]),
 
+      // 主屏幕活体存在（Finch 式 home-screen widget · D1/D7 54/37 超 Duolingo）
+      // 守原则5：badge 只 0/1 安静点，永不计数/永不"漏 X 天"
+      el('div', { class: 'section-title' }, ['主屏幕']),
+      el('div', { class: 'card' }, [
+        el('div', { class: 'setting-row' }, [el('div', { class: 'setting-row__main' }, [
+          el('div', { class: 'setting-row__title' }, ['活体图标点']),
+          el('div', { class: 'setting-row__sub' }, [
+            WidgetBadge.hasBadgeApi() ? '今天有旧瞬间想见你时，主屏图标显示一个安静的点' : '当前环境不支持（iOS 静默降级，原生壳内生效）',
+          ]),
+        ]), el('div', { class: 'list-row__right' }, [WidgetBadge.hasBadgeApi() ? '✓' : '—'])]),
+        el('div', { class: 'setting-row', onclick: () => openInstallGuide(navigate) }, [el('div', { class: 'setting-row__main' }, [
+          el('div', { class: 'setting-row__title' }, ['把 TSD 放到主屏幕']),
+          el('div', { class: 'setting-row__sub' }, ['添加到主屏 · 像 Finch 一样活在你每天都能看到的地方']),
+        ]), el('div', { class: 'list-row__right' }, ['▸'])]),
+      ]),
+
       el('div', { class: 'section-title' }, ['试用指南 & 审核']),
       el('div', { class: 'card' }, [
         el('div', { class: 'setting-row', onclick: () => openTrialGuide(navigate) }, [el('div', { class: 'setting-row__main' }, [el('div', { class: 'setting-row__title' }, ['试用指南']), el('div', { class: 'setting-row__sub' }, ['3 分钟体验路线、当前可点能力'])]), el('div', { class: 'list-row__right' }, ['▸'])]),
@@ -1842,6 +1889,51 @@ const App = (() => {
     sheet(content);
   }
 
+  // 把 TSD 放到主屏幕（Finch 式活体存在引导）
+  // 安装后 home-screen 图标会有 badge 安静点（今天有旧瞬间想见你时）
+  function openInstallGuide(navigate) {
+    const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    const isAndroid = /android/i.test(navigator.userAgent);
+    const content = el('div', {}, [
+      el('h3', { class: 'h3 mb-3' }, ['把 TSD 放到主屏幕']),
+      el('p', { class: 'muted mb-4', style: 'font-size:13px;line-height:1.6;' }, [
+        '像 Finch 一样，TSD 可以活在你每天都能看到的地方。',
+        el('br'), '今天有旧瞬间想见你时，主屏图标会显示一个安静的点——不催、不数、不羞辱。',
+      ]),
+      // 安装按钮（Android Chromium 支持 beforeinstallprompt）
+      window.__tsdInstallPrompt ? el('button', { class: 'btn btn--primary btn--lg btn--block mb-4', onclick: async () => {
+        const ev = window.__tsdInstallPrompt;
+        ev.prompt();
+        try { await ev.userChoice; } catch (e) {}
+        window.__tsdInstallPrompt = null;
+        toast('已添加到主屏幕');
+      } }, ['安装到主屏幕']) : null,
+      // iOS 手动引导
+      isIOS ? el('div', { class: 'card mb-3' }, [
+        el('div', { class: 'h3', style: 'font-size:14px;margin-bottom:8px;' }, ['iOS · 两步']),
+        el('p', { class: 'muted', style: 'font-size:13px;line-height:1.6;' }, [
+          '1. 点 Safari 底部的', el('strong', {}, [' 分享 ']), '按钮', el('span', { style: 'font-size:16px;' }, [' ⎋ ']),
+          el('br'), '2. 选', el('strong', {}, [' 添加到主屏幕 ']),
+        ]),
+      ]) : null,
+      // Android 手动引导
+      isAndroid && !window.__tsdInstallPrompt ? el('div', { class: 'card mb-3' }, [
+        el('div', { class: 'h3', style: 'font-size:14px;margin-bottom:8px;' }, ['Android · 浏览器菜单']),
+        el('p', { class: 'muted', style: 'font-size:13px;line-height:1.6;' }, ['打开浏览器菜单 ⋮ → 添加到主屏幕']),
+      ]) : null,
+      el('div', { class: 'card mb-3', style: 'background:var(--bg-elev);' }, [
+        el('div', { class: 'h3', style: 'font-size:14px;margin-bottom:6px;' }, ['装上之后']),
+        el('div', { class: 'muted', style: 'font-size:12px;line-height:1.6;' }, [
+          '· 主屏图标会在"今天有旧瞬间想见你"时显示一个安静的点',
+          el('br'), '· 点图标直接进超精简"今日"单屏，10 秒带回一个旧瞬间',
+          el('br'), '· 重逢后，点自动消失——明天才会有新的',
+        ]),
+      ]),
+      el('p', { class: 'muted', style: 'font-size:11px;text-align:center;' }, ['原生 iOS WidgetKit（桌面小组件）待 Xcode hand-off · 当前为 PWA 安静 badge 版']),
+    ]);
+    sheet(content);
+  }
+
   // iOS 触觉反馈（沉浸锚点）：native 下 Capacitor 注入 Haptics，web 静默降级
   function haptic(kind) {
     try {
@@ -2030,6 +2122,8 @@ const App = (() => {
         if (status === 'active') PushHook.scheduleTomorrowEcho();
       });
     }
+    // Widget badge 清除（今天已重逢 → home-screen 图标点消失）
+    if (typeof WidgetBadge !== 'undefined') WidgetBadge.sync();
     peakEndRitual('这一层留住了', neu.length && !qm ? '又浮现一枚印记' : '被带回的这一刻，又厚了一层', () => navigate('today'));
   }
 
@@ -2506,7 +2600,12 @@ const App = (() => {
         '你封存的瞬间，今天解锁了。'
       );
     }
-    const path = location.hash.replace('#', '') || 'today';
+    // Widget badge 同步（Finch 式活体存在 · App Badging API）
+    // 守原则5：只 0/1 安静点，永不计数/永不"漏 X 天"
+    if (typeof WidgetBadge !== 'undefined') WidgetBadge.sync();
+    // widget 模式检测：从 home-screen widget 入口带 ?from=widget 启动 → 超精简单屏
+    const isWidgetMode = new URLSearchParams(location.search).get('from') === 'widget';
+    const path = isWidgetMode ? 'widget' : (location.hash.replace('#', '') || 'today');
     render(path);
     const boot = document.getElementById('boot');
     const revealCaps = () => { if (newCaps.length) setTimeout(() => peakEndRitual('一封来自过去的信到了', newCaps.length + ' 封来自过去的你', () => navigate('capsules')), 200); };
@@ -2518,3 +2617,22 @@ const App = (() => {
 })();
 
 document.addEventListener('DOMContentLoaded', () => App.start());
+
+// PWA 安装提示捕获（Android Chromium · 用于设置页"安装到主屏幕"按钮）
+// iOS Safari 无此事件，走手动引导
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  window.__tsdInstallPrompt = e;
+});
+
+// SW periodic-sync 唤醒：刷新 home-screen badge（Finch 式活体演化）
+navigator.serviceWorker && navigator.serviceWorker.addEventListener('message', (e) => {
+  if (e.data && e.data.type === 'tsd-sync-badge' && typeof WidgetBadge !== 'undefined') {
+    WidgetBadge.sync();
+  }
+});
+
+// standalone 模式启动后注册周期同步（让 badge 在 app 未开时也演化）
+if (WidgetBadge && WidgetBadge.isStandalone && WidgetBadge.isStandalone()) {
+  WidgetBadge.registerPeriodicSync();
+}
