@@ -248,7 +248,17 @@ const App = (() => {
         el('p', { class: 'muted mb-6' }, ['每天一次，TSD 把你带回一个旧瞬间。默认隐藏人物和原文。']),
         el('div', { class: 'flex gap-3' }, [
           el('button', { class: 'btn btn--ghost btn--lg', style: 'flex:1', onclick: () => { TSD.setNotifications(false); finish(); } }, ['暂不']),
-          el('button', { class: 'btn btn--primary btn--lg', style: 'flex:1', onclick: () => { TSD.setNotifications(true); finish(); } }, ['打开']),
+          el('button', { class: 'btn btn--primary btn--lg', style: 'flex:1', onclick: () => {
+            TSD.setNotifications(true);
+            // 立即请求权限 + 调度首条"今天的回声"推送（原生壳内生效，web 静默降级）
+            // 留存漏斗修复：用户同意通知后即调度，不依赖当天完成回访
+            if (typeof PushHook !== 'undefined' && PushHook.isNative()) {
+              PushHook.scheduleTomorrowEcho().then(ok => {
+                if (ok) toast('已为你安排明天的回声提醒');
+              });
+            }
+            finish();
+          } }, ['打开']),
         ]),
       ]),
     ];
