@@ -10,7 +10,7 @@ const root = path.resolve(__dirname, '..');
 const www = path.join(root, 'www');
 if (!fs.existsSync(www)) fs.mkdirSync(www, { recursive: true });
 
-const assets = ['index.html', 'app.js', 'data.js', 'styles.css', 'manifest.json', 'icon-192.png', 'icon-512.png'];
+const assets = ['index.html', 'app.js', 'data.js', 'styles.css', 'manifest.json', 'icon-192.png', 'icon-512.png', 'push.js', 'widget.js'];
 const SW_BLOCK = /<script>\s*if \('serviceWorker' in navigator\)[\s\S]*?<\/script>/;
 
 let copied = 0;
