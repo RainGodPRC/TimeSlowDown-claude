@@ -254,6 +254,22 @@ const TSD = (() => {
     save();
     return m;
   }
+  // ---------- 语音捕获（Stoic/Rosebud/Day One 式 · 情感密度最高）----------
+  // 回访后"按住录 5 秒"附到瞬间；未来回访 echo 卡自动播 2s 片段。
+  // 守原则5：可选不强制；守原则9：不延长会话（限时录制）。
+  // 存储：base64 dataURL 入 IndexedDB（与影像同位），native 走 Capacitor Audio。
+  function setMomentAudio(id, dataUrl, durationMs) {
+    const m = getMoment(id);
+    if (!m || !dataUrl) return null;
+    // 限长：录音超 30s 截断标记（防存储膨胀，与影像压缩同哲学）
+    m.audio = { dataUrl, durationMs: Math.min(durationMs || 0, 30000), at: Date.now() };
+    save();
+    return m.audio;
+  }
+  function getMomentAudio(id) {
+    const m = getMoment(id);
+    return (m && m.audio) ? m.audio : null;
+  }
   // 删除单个瞬间 —— 级联清理回访/引子/胶囊，但生成墓碑支持会话内撤销（守"数据不丢"铁律）
   // 复用 softDelete 的 localStorage 墓碑模式，独立 key（单瞬间墓碑与全清墓碑互不干扰，至多各 1 条）
   const MOMENT_TOMB_KEY = KEY + '-moment-tomb';
@@ -875,6 +891,7 @@ const TSD = (() => {
     init,
     raw: () => state,
     getMoments, getMoment, addMoment, updateMoment, deleteMoment,
+    setMomentAudio, getMomentAudio,
     restoreDeletedMoment, hasMomentTombstone, clearMomentTombstone,
     searchMoments,
     getRevisits, getRevisitCount, addRevisit, thickness,

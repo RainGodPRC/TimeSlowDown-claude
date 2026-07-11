@@ -848,3 +848,13 @@ ul, ol { list-style: none; }
 .install-prompt__main { flex: 1; }
 .install-prompt__title { font-size: 14px; color: var(--fg); }
 .install-prompt__sub { font-size: 11px; color: var(--fg-mute); margin-top: 2px; line-height: 1.4; }
+
+/* 语音捕获脉冲（录音中指示） */
+.voice-pulse {
+  text-align: center; font-size: 40px; color: var(--danger);
+  animation: voicePulse 1s infinite var(--ease);
+}
+@keyframes voicePulse {
+  0%, 100% { opacity: 0.4; transform: scale(0.9); }
+  50% { opacity: 1; transform: scale(1.15); }
+}

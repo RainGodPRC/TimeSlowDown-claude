@@ -478,6 +478,24 @@ const App = (() => {
       ]),
       lastFeelingTag ? el('div', { class: 'echo-card__mood' }, [lastFeelingTag]) : null,
       opts.media !== false && m.media ? el('img', { src: m.media, style: 'max-width:60%;border-radius:14px;margin:0 auto 20px;position:relative;' }) : null,
+      // 语音回声（Stoic/Rosebud 式 · 情感密度最高）：有录音时 echo 卡显示"听这一刻的声音"
+      // 守原则9：不自动播（不打扰），用户点才播；2s 片段守不延长会话
+      m.audio ? el('div', { style: 'text-align:center;margin:0 auto 20px;' }, [
+        el('button', {
+          class: 'btn btn--ghost btn--sm',
+          'aria-label': '播放这一刻的声音',
+          onclick: (e) => {
+            // 复用浏览器原生 audio，避免引入复杂播放器
+            const a = document.createElement('audio');
+            a.src = m.audio.dataUrl;
+            a.currentTime = Math.max(0, (m.audio.durationMs - 2000) / 1000); // 末尾 2s
+            a.play().catch(() => {});
+            e.target.textContent = '◉ 正在听…';
+            a.addEventListener('ended', () => { e.target.textContent = '↺ 再听这一刻的声音'; });
+            a.addEventListener('pause', () => { e.target.textContent = '↺ 再听这一刻的声音'; });
+          },
+        }, ['♪ 听这一刻的声音']),
+      ]) : null,
       el('div', { class: 'echo-card__actions' }, [
         el('button', { class: 'btn btn--primary btn--lg btn--block', onclick: opts.ctaAction }, [opts.ctaText || '带回这一刻']),
         el('button', { class: 'btn btn--ghost btn--sm', onclick: () => opts.navigate('moment/' + m.id) }, ['看完整瞬间']),
@@ -615,6 +633,10 @@ const App = (() => {
           el('input', { type: 'checkbox', id: 'thread-check', disabled: true, style: 'margin-top:2px;accent-color:var(--accent);width:16px;height:16px;flex:none;' }),
           el('span', {}, ['这句还没想完，明天再续（留个引子）']),
         ]),
+        // 语音捕获（Stoic/Rosebud 式 · 情感密度最高）：10s 后浮出，可选录 5s
+        el('div', { id: 'voice-wrap', style: 'display:none;margin-top:12px;' }, [
+          el('button', { class: 'btn btn--ghost btn--sm btn--block', id: 'voice-btn', onclick: () => openVoiceCaptureSheet(id) }, ['🎙 录一段声音（5 秒）']),
+        ]),
         el('div', { class: 'flex gap-3 mt-3' }, [
           el('button', { class: 'btn btn--ghost btn--lg', style: 'flex:1', onclick: () => navigate('today') }, ['就到这里']),
           el('button', { class: 'btn btn--primary btn--lg', style: 'flex:1', id: 'save-feeling', disabled: true }, ['留下这一层']),
@@ -653,6 +675,8 @@ const App = (() => {
           $('#save-feeling', view).disabled = false;
           $('#thread-check', view).disabled = false;
           ringLabel.textContent = '✓';
+          const vw2 = $('#voice-wrap', view);
+          if (vw2) vw2.style.display = '';
         }
       }, 1000);
       haptic('impact');
@@ -674,6 +698,9 @@ const App = (() => {
         // 显示"再停留"按钮（最多加时 1 次）
         const eb = $('#extend-btn', view);
         if (eb && !extended) eb.style.display = '';
+        // 显示语音捕获入口（Stoic/Rosebud 式 · 情感密度最高）
+        const vw = $('#voice-wrap', view);
+        if (vw) vw.style.display = '';
         toast('可以补一句了，也可以不补');
       }
     }, 1000);
@@ -1932,6 +1959,118 @@ const App = (() => {
       el('p', { class: 'muted', style: 'font-size:11px;text-align:center;' }, ['原生 iOS WidgetKit（桌面小组件）待 Xcode hand-off · 当前为 PWA 安静 badge 版']),
     ]);
     sheet(content);
+  }
+
+  // ============================================================
+  // 语音捕获（Stoic/Rosebud/Day One 式 · 情感密度最高）
+  // 回访后"按住录 5 秒"附到瞬间；未来回访 echo 卡自动播 2s 片段。
+  // 守原则5：可选不强制；守原则9：限时 5s，不延长会话。
+  // MediaRecorder API (PWA) + Capacitor Audio (native)；存储 base64 入 IndexedDB。
+  // ============================================================
+  function openVoiceCaptureSheet(momentId) {
+    const overlay = el('div', { class: 'feeling-tag-ritual' });
+    const content = el('div', { class: 'feeling-tag__content' });
+    let mediaRecorder = null;
+    let chunks = [];
+    let stream = null;
+    let startTime = 0;
+    let timerInt = null;
+    let recording = false;
+
+    const render = (state, audioUrl, durationMs) => {
+      content.innerHTML = '';
+      const children = [
+        el('div', { style: 'font-size:32px;margin-bottom:8px;text-align:center;' }, ['🎙']),
+        el('h3', { class: 'h3 mb-2', style: 'text-align:center;' }, ['录一段声音给这一刻']),
+      ];
+      if (state === 'idle') {
+        children.push(el('p', { class: 'muted mb-4', style: 'font-size:13px;line-height:1.6;text-align:center;' }, [
+          '5 秒就够。', el('br'),
+          '以后再被带回时，这一刻会带着你的声音回来。',
+        ]));
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          children.push(el('p', { class: 'muted', style: 'font-size:12px;text-align:center;color:var(--danger);' }, ['当前环境不支持录音（iOS Safari 需原生壳，或用 HTTPS+授麦）']));
+        }
+        children.push(el('button', { class: 'btn btn--primary btn--lg btn--block mt-4', id: 'rec-btn', onclick: startRec }, ['开始录音（5 秒）']));
+        children.push(el('button', { class: 'btn btn--ghost btn--sm btn--block mt-3', onclick: () => closeRitual(overlay) }, ['跳过']));
+      } else if (state === 'recording') {
+        children.push(el('div', { class: 'voice-pulse' }, ['●']));
+        children.push(el('div', { class: 'nums', style: 'font-size:32px;color:var(--accent);text-align:center;margin:12px 0;', id: 'rec-timer' }, ['5']));
+        children.push(el('p', { class: 'muted', style: 'font-size:12px;text-align:center;' }, ['录音中…到 5 秒自动停']));
+        children.push(el('button', { class: 'btn btn--ghost btn--lg btn--block mt-3', onclick: stopRec }, ['停止']));
+      } else if (state === 'done') {
+        children.push(el('p', { class: 'muted mb-3', style: 'font-size:13px;text-align:center;' }, ['录好了。听一下？']));
+        children.push(el('audio', { controls: '', src: audioUrl, style: 'width:100%;margin-bottom:12px;' }));
+        children.push(el('div', { class: 'flex gap-3' }, [
+          el('button', { class: 'btn btn--ghost btn--lg', style: 'flex:1', onclick: () => { resetRec(); render('idle'); } }, ['重录']),
+          el('button', { class: 'btn btn--primary btn--lg', style: 'flex:1', onclick: async () => {
+            try {
+              const dataUrl = await blobToDataUrl(audioUrl);
+              TSD.setMomentAudio(momentId, dataUrl, durationMs);
+              haptic('success');
+              toast('已留住这一刻的声音');
+            } catch (e) { toast('存储失败'); }
+            closeRitual(overlay);
+          } }, ['留住']),
+        ]));
+      }
+      content.appendChild(el('div', {}, children));
+    };
+
+    const startRec = async () => {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        chunks = [];
+        const mime = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : '';
+        mediaRecorder = new MediaRecorder(stream, mime ? { mimeType: mime } : {});
+        mediaRecorder.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+        mediaRecorder.onstop = () => {
+          const blob = new Blob(chunks, { type: mime || 'audio/webm' });
+          const url = URL.createObjectURL(blob);
+          const durationMs = Date.now() - startTime;
+          if (stream) stream.getTracks().forEach(t => t.stop());
+          recording = false;
+          render('done', url, durationMs);
+        };
+        mediaRecorder.start();
+        recording = true;
+        startTime = Date.now();
+        render('recording');
+        let left = 5;
+        timerInt = setInterval(() => {
+          left--;
+          const t = $('#rec-timer', content);
+          if (t) t.textContent = String(Math.max(left, 0));
+          if (left <= 0) { clearInterval(timerInt); stopRec(); }
+        }, 1000);
+      } catch (e) {
+        toast('无法访问麦克风');
+        closeRitual(overlay);
+      }
+    };
+    const stopRec = () => {
+      if (timerInt) { clearInterval(timerInt); timerInt = null; }
+      if (mediaRecorder && recording) { recording = false; mediaRecorder.stop(); }
+    };
+    const resetRec = () => {
+      if (stream) stream.getTracks().forEach(t => t.stop());
+      chunks = []; mediaRecorder = null;
+    };
+
+    overlay.appendChild(content);
+    document.body.appendChild(overlay);
+    requestAnimationFrame(() => overlay.classList.add('is-in'));
+    render('idle');
+  }
+
+  // blob → dataURL（base64，存 IndexedDB）
+  function blobToDataUrl(blob) {
+    return new Promise((res, rej) => {
+      const r = new FileReader();
+      r.onloadend = () => res(r.result);
+      r.onerror = rej;
+      r.readAsDataURL(blob);
+    });
   }
 
   // iOS 触觉反馈（沉浸锚点）：native 下 Capacitor 注入 Haptics，web 静默降级
