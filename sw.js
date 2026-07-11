@@ -1,6 +1,6 @@
 // TSD Claude Code 分支 Service Worker
-const CACHE = 'tsd-cc-v30';
-const ASSETS = ['./', './index.html', './styles.css?v=30', './app.js?v=30', './data.js?v=30', './push.js?v=30', './widget.js?v=30', './manifest.json', './icon-192.png', './icon-512.png'];
+const CACHE = 'tsd-cc-v32';
+const ASSETS = ['./', './index.html', './styles.css?v=32', './app.js?v=32', './data.js?v=32', './push.js?v=32', './widget.js?v=32', './manifest.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting()));

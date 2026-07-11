@@ -216,7 +216,7 @@ const TSD = (() => {
       } catch (e) {
         try { parsed = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (_) {}
       }
-      state = (parsed && parsed.version === VERSION) ? parsed : freshState();
+      state = (parsed && typeof parsed === 'object') ? migrateState(parsed) : freshState();
       return state;
     })();
     return _ready;
@@ -243,9 +243,40 @@ const TSD = (() => {
       lastEchoDate: null,
       achievements: {},
       capsules: [], // 时间胶囊：封存给未来的自己（C-A 病毒引擎）
+      grove: null, // 共享林子（4z）
     };
   }
 
+  // ---------- Schema migration（交付级：跨版本升级永远保留用户数据）----------
+  // Day One 级数据完整性：版本不匹配时 merge 缺字段，绝不丢弃用户记忆。
+  // 新字段加到 freshState + 这里显式 migrate，确保旧数据升级后字段完整。
+  function migrateState(parsed) {
+    if (!parsed || typeof parsed !== 'object') return freshState();
+    const fresh = freshState();
+    // 顶层字段 merge：优先用户已有值，缺字段补 fresh 默认
+    const merged = Object.assign({}, fresh, parsed);
+    // 嵌套对象 merge（settings/account 等不能整个覆盖丢字段）
+    if (parsed.settings) merged.settings = Object.assign({}, fresh.settings, parsed.settings);
+    if (parsed.account) merged.account = Object.assign({}, fresh.account, parsed.account);
+    // 数组字段：缺失补空数组（绝不覆盖为 undefined）
+    merged.moments = Array.isArray(parsed.moments) ? parsed.moments : fresh.moments;
+    merged.revisits = Array.isArray(parsed.revisits) ? parsed.revisits : fresh.revisits;
+    merged.aiLog = Array.isArray(parsed.aiLog) ? parsed.aiLog : [];
+    merged.achievements = (parsed.achievements && typeof parsed.achievements === 'object') ? parsed.achievements : {};
+    merged.capsules = Array.isArray(parsed.capsules) ? parsed.capsules : [];
+    merged.grove = (parsed.grove && typeof parsed.grove === 'object') ? parsed.grove : null;
+    // moment 字段完整性：缺 when/media/important 等补默认（防后续访问 undefined 崩）
+    merged.moments = merged.moments.map(m => Object.assign({
+      id: 'm-' + Date.now() + '-' + Math.random().toString(36).slice(2,6),
+      kind: 'grass',
+      when: { precision: 'day', text: '某天', start: null },
+      people: [], place: null, tags: [],
+      media: null, audio: null, important: false, thread: null,
+      createdAt: Date.now(), source: 'migrated', aiDraft: null, confirmed: true,
+    }, m));
+    merged.version = VERSION;
+    return merged;
+  }
 
   // ---------- moments ----------
   function getMoments() { return state.moments.slice(); }

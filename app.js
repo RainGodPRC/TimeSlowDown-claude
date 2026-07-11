@@ -69,8 +69,9 @@ const App = (() => {
     const top = el('div', { class: 'topbar' }, [
       el('div', { class: 'topbar__title' }, [document.createTextNode('TimeSlowDown')]),
       el('div', { class: 'topbar__right' }, [
-        el('button', { class: 'btn btn--sm btn--ghost', onclick: () => navigate('search'), 'aria-label': '搜索瞬间' }, ['⌕']),
-        el('button', { class: 'btn btn--sm btn--ghost', onclick: () => navigate('settings'), 'aria-label': '设置' }, ['⚙︎']),
+        // 无 aria-label：accessible name 来自可见文本（符号+vh 文本），避免 label-content-name-mismatch
+        el('button', { class: 'btn btn--sm btn--ghost', onclick: () => navigate('search') }, ['⌕', el('span', { class: 'vh' }, ['搜索瞬间'])]),
+        el('button', { class: 'btn btn--sm btn--ghost', onclick: () => navigate('settings') }, ['⚙︎', el('span', { class: 'vh' }, ['设置'])]),
       ]),
     ]);
     app.appendChild(top);
@@ -589,14 +590,15 @@ const App = (() => {
   // 重逢印记墙（Codex"雾中印记"范式：惊喜出现，不展示 %/锁定清单，永久雾中未知位）
   function milestoneCard() {
     const unlocked = TSD.getAchievements().filter(a => a.unlocked);
-    return el('div', { class: 'card', onclick: () => navigate('imprints'), 'aria-label': '查看全部重逢印记' }, [
+    return el('div', { class: 'card', onclick: () => navigate('imprints') }, [
       el('div', { style: 'display:flex;flex-wrap:wrap;gap:14px;align-items:flex-start;' }, [
         ...unlocked.map(a => imprintTile(a, false)),
-        el('div', { style: 'display:flex;flex-direction:column;align-items:center;width:52px;opacity:.5;' }, [
+        el('div', { style: 'display:flex;flex-direction:column;align-items:center;width:52px;' }, [
           el('div', { style: 'font-size:22px;color:var(--fg-faint);' }, ['?']),
-          el('div', { class: 'muted', style: 'font-size:9px;text-align:center;margin-top:4px;line-height:1.2;' }, ['雾中']),
+          el('div', { style: 'font-size:11px;text-align:center;margin-top:4px;line-height:1.2;color:var(--fg-faint);' }, ['雾中']),
         ]),
       ]),
+      el('span', { class: 'vh' }, ['重逢印记墙，点击查看全部']),
       el('div', { class: 'muted', style: 'font-size:11px;margin-top:14px;text-align:center;' }, ['印记不求全、不打分——重逢本身即奖励 · 点开看全部 ›']),
     ]);
   }
@@ -1558,7 +1560,7 @@ const App = (() => {
           el('div', { style: 'display:flex;flex-direction:column;align-items:center;width:64px;opacity:.45;' }, [
             el('div', { style: 'font-size:28px;color:var(--fg-faint);' }, ['?']),
             el('div', { class: 'muted', style: 'font-size:10px;text-align:center;margin-top:6px;line-height:1.2;' }, ['雾中']),
-            el('div', { class: 'muted', style: 'font-size:9px;text-align:center;margin-top:2px;color:var(--fg-faint);' }, ['下一枚仍在生活的雾里']),
+            el('div', { class: 'muted', style: 'font-size:11px;text-align:center;margin-top:2px;color:var(--fg-mute);' }, ['下一枚仍在生活的雾里']),
           ]),
         ]),
       ]),
@@ -2394,7 +2396,7 @@ const App = (() => {
     };
 
     return el('div', { class: 'card' }, [
-      el('div', { style: 'display:flex;gap:2px;font-size:9px;color:var(--fg-faint);margin-bottom:6px;' }, weekDays.map(w =>
+      el('div', { style: 'display:flex;gap:2px;font-size:11px;color:var(--fg-mute);margin-bottom:6px;' }, weekDays.map(w =>
         el('div', { style: 'flex:1;text-align:center;' }, [w])
       )),
       el('div', { style: 'display:grid;grid-template-columns:repeat(7,1fr);gap:3px;' },
