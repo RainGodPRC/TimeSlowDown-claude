@@ -1634,9 +1634,119 @@ const App = (() => {
         el('p', { class: 'muted', style: 'font-size:12px;margin:6px 0 16px;' }, ['你回访时的心情分布——没有好坏，只是天气。']),
         feelingWeatherChart(s.feelingTagFreq),
       ]) : null,
+      // Life Mash（1SE 式蒙太奇 · 把最近回访的瞬间照片编译成 15s 幻灯片）
+      // 守原则9：按需生成非每日；无 streak。复用现有 share-card 基建。
+      lifeMashSection(),
       el('p', { class: 'muted mt-5', style: 'font-size:11px;text-align:center;' }, ['反思性怀旧，不是竞争性统计。参 Spotify Wrapped 反 Feed 版；守原则7/9。']),
     ]));
   });
+
+  // Life Mash 区块（1SE 式蒙太奇 · 按需生成 15s 幻灯片）
+  function lifeMashSection() {
+    // 收集最近被回访的、有照片的瞬间（最近 N 个，倒序）
+    const revisited = TSD.raw().revisits
+      .slice().sort((a, b) => b.at - a.at)
+      .map(r => TSD.getMoment(r.momentId))
+      .filter((m, i, arr) => m && m.media && arr.findIndex(x => x && x.id === m.id) === i) // 去重
+      .slice(0, 8);
+    const hasEnough = revisited.length >= 2;
+    return el('div', { class: 'card mb-3' }, [
+      el('div', { class: 'echo-card__label' }, ['人生蒙太奇']),
+      el('p', { class: 'muted', style: 'font-size:12px;margin:6px 0 16px;line-height:1.5;' }, [
+        '把最近回访过的瞬间照片，编译成 15 秒的短片——', el('br'),
+        hasEnough ? '一个被你自己反复看过的、回访过的人生片段。' : '（回访 2 个以上带照片的瞬间后解锁）',
+      ]),
+      hasEnough ? el('button', {
+        class: 'btn btn--primary btn--block',
+        onclick: () => openLifeMashSheet(revisited),
+      }, ['生成 15 秒蒙太奇 ▸']) : el('div', { class: 'muted text-center', style: 'font-size:12px;padding:12px;' }, ['还需 ' + (2 - revisited.length) + ' 个带照片的回访']),
+    ]);
+  }
+
+  // Life Mash 生成器（canvas 序列帧 → 自动播放幻灯片）
+  function openLifeMashSheet(moments) {
+    const overlay = el('div', { class: 'feeling-tag-ritual' });
+    const content = el('div', { class: 'feeling-tag__content', style: 'max-width:420px;' });
+    const canvas = el('canvas', { width: 540, height: 540, style: 'width:100%;max-width:420px;border-radius:14px;background:#0f1014;display:block;margin:0 auto;' });
+    const ctx = canvas.getContext('2d');
+    let idx = 0, timerInt = null, playing = false;
+
+    const drawFrame = (i) => {
+      const m = moments[i % moments.length];
+      ctx.fillStyle = '#0f1014'; ctx.fillRect(0, 0, 540, 540);
+      // 加载图片
+      const img = new Image();
+      img.onload = () => {
+        // cover 居中
+        const r = Math.max(540 / img.width, 540 / img.height);
+        const w = img.width * r, h = img.height * r;
+        ctx.drawImage(img, (540 - w) / 2, (540 - h) / 2, w, h);
+        // 渐变暗角 + 引文叠层
+        const g = ctx.createLinearGradient(0, 340, 0, 540);
+        g.addColorStop(0, 'rgba(15,16,20,0)'); g.addColorStop(1, 'rgba(15,16,20,0.92)');
+        ctx.fillStyle = g; ctx.fillRect(0, 340, 540, 200);
+        // 引文（截断）
+        ctx.fillStyle = '#ece8df'; ctx.font = '20px Georgia, serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        const q = m.quote.length > 32 ? m.quote.slice(0, 31) + '…' : m.quote;
+        wrapText(ctx, '"' + q + '"', 270, 470, 480, 26);
+        // 索引点
+        ctx.fillStyle = 'rgba(240,178,136,0.5)'; ctx.font = '12px sans-serif';
+        ctx.fillText((i + 1) + ' / ' + moments.length, 270, 28);
+      };
+      img.src = m.media;
+    };
+
+    const play = () => {
+      playing = true;
+      drawFrame(0);
+      timerInt = setInterval(() => {
+        idx = (idx + 1) % moments.length;
+        drawFrame(idx);
+      }, 2000); // 每帧 2s，8 帧 ≈ 16s（接近 15s 目标）
+    };
+    const stop = () => { if (timerInt) { clearInterval(timerInt); timerInt = null; } playing = false; };
+
+    content.appendChild(el('div', {}, [
+      el('h3', { class: 'h3 mb-3', style: 'text-align:center;' }, ['人生蒙太奇 · 15 秒']),
+      canvas,
+      el('div', { class: 'flex gap-3 mt-4' }, [
+        el('button', { class: 'btn btn--ghost btn--lg', style: 'flex:1', onclick: () => { playing ? stop() : play(); } }, ['播放/暂停']),
+        el('button', { class: 'btn btn--primary btn--lg', style: 'flex:1', onclick: async () => {
+          // 导出当前帧为图片分享（canvas 截图，复用 share 通路）
+          try {
+            const blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
+            const file = new File([blob], 'tsd-mash-' + Date.now() + '.png', { type: 'image/png' });
+            if (navigator.canShare && navigator.canShare({ files: [file] })) {
+              await navigator.share({ files: [file], title: '人生蒙太奇', text: '我的回访过的人生 · TimeSlowDown' });
+            } else { toast('已生成（当前环境不支持系统分享，可长按保存）'); }
+          } catch (e) {}
+        } }, ['分享这一帧']),
+      ]),
+      el('button', { class: 'btn btn--ghost btn--sm btn--block mt-3', onclick: () => { stop(); closeRitual(overlay); } }, ['关闭']),
+      el('p', { class: 'muted mt-3', style: 'font-size:11px;text-align:center;' }, ['参 1 Second Everyday · 按需生成，不每日、无 streak']),
+    ]));
+
+    overlay.appendChild(content);
+    document.body.appendChild(overlay);
+    requestAnimationFrame(() => overlay.classList.add('is-in'));
+    // 自动播放
+    setTimeout(play, 100);
+  }
+
+  // canvas 文本换行
+  function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
+    const chars = text.split('');
+    let line = '', lineCount = 0;
+    for (let i = 0; i < chars.length; i++) {
+      const test = line + chars[i];
+      if (ctx.measureText(test).width > maxWidth && line) {
+        ctx.fillText(line, x, y + lineCount * lineHeight);
+        line = chars[i]; lineCount++;
+        if (lineCount > 2) break; // 最多 3 行
+      } else { line = test; }
+    }
+    if (lineCount <= 2) ctx.fillText(line, x, y + lineCount * lineHeight);
+  }
 
   // ============================================================
   // 视图：invite 礼物式推荐（C-F · 用户自写邀请，零奖励）
