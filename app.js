@@ -11,6 +11,12 @@ const App = (() => {
   // ---------- 路由 ----------
   const routes = {};
   let currentView = null;
+  // 路由级计时器（revisit/life-mash/voice）：离开视图前必须清理，否则后台 interval
+  // 会继续引用已移除的 DOM 节点 → 内存泄漏 + 操作 null 元素竞态。
+  // 提到模块作用域统一管理，render() 开头兜底 clearInterval。
+  let routeTimer = null;
+  function setRouteTimer(id) { clearRouteTimer(); routeTimer = id; }
+  function clearRouteTimer() { if (routeTimer) { clearInterval(routeTimer); routeTimer = null; } }
 
   function route(path, handler) { routes[path] = handler; }
 
@@ -29,6 +35,8 @@ const App = (() => {
     const params = rest;
     const handler = routes[name] || routes.today;
     const app = $('#app');
+    // 离开上一个视图前清理其计时器（防 revisit/voice/mash 的 interval 泄漏 + 竞态）
+    clearRouteTimer();
     app.innerHTML = '';
     currentView = name;
 
@@ -584,7 +592,6 @@ const App = (() => {
 
     const revs = TSD.getRevisits(id);
     let secondsLeft = 10;
-    let timerInt = null;
     let finished = false;
 
     view.appendChild(el('div', {}, [
@@ -661,7 +668,7 @@ const App = (() => {
       $('#save-feeling', view).disabled = true;
       $('#thread-check', view).disabled = true;
       if (ringLabel) ringLabel.textContent = '10';
-      timerInt = setInterval(() => {
+      setRouteTimer(setInterval(() => {
         secondsLeft--;
         const elapsed = 10 - secondsLeft;
         if (ringFill) {
@@ -670,7 +677,7 @@ const App = (() => {
         }
         if (secondsLeft <= 0 && !finished) {
           finished = true;
-          clearInterval(timerInt);
+          clearRouteTimer();
           $('#feeling-input', view).disabled = false;
           $('#save-feeling', view).disabled = false;
           $('#thread-check', view).disabled = false;
@@ -678,10 +685,10 @@ const App = (() => {
           const vw2 = $('#voice-wrap', view);
           if (vw2) vw2.style.display = '';
         }
-      }, 1000);
+      }, 1000));
       haptic('impact');
     }
-    timerInt = setInterval(() => {
+    setRouteTimer(setInterval(() => {
       secondsLeft--;
       const elapsed = 10 - secondsLeft;
       if (ringFill) {
@@ -690,7 +697,7 @@ const App = (() => {
       }
       if (secondsLeft <= 0 && !finished) {
         finished = true;
-        clearInterval(timerInt);
+        clearRouteTimer();
         $('#feeling-input', view).disabled = false;
         $('#save-feeling', view).disabled = false;
         $('#thread-check', view).disabled = false;
@@ -703,7 +710,7 @@ const App = (() => {
         if (vw) vw.style.display = '';
         toast('可以补一句了，也可以不补');
       }
-    }, 1000);
+    }, 1000));
 
     $('#save-feeling', view).addEventListener('click', () => {
       const v = $('#feeling-input', view).value.trim();
@@ -717,7 +724,7 @@ const App = (() => {
         result: '保留用户原话，未改写过去记录',
         localOnly: true,
       });
-      clearInterval(timerInt);
+      clearRouteTimer();
       // 对话式回访（Day One Daily Chat 范式 · TSD 差异化：只锚定旧记忆）：
       // 有感受时先邀请"和这一刻说三句"，再进标签微仪式；无感受直接 peakEnd。
       // 守原则5：可选、单次、不诱导续杯。
@@ -1759,7 +1766,7 @@ const App = (() => {
     const content = el('div', { class: 'feeling-tag__content', style: 'max-width:420px;' });
     const canvas = el('canvas', { width: 540, height: 540, style: 'width:100%;max-width:420px;border-radius:14px;background:#0f1014;display:block;margin:0 auto;' });
     const ctx = canvas.getContext('2d');
-    let idx = 0, timerInt = null, playing = false;
+    let idx = 0, playing = false;
 
     const drawFrame = (i) => {
       const m = moments[i % moments.length];
@@ -1789,12 +1796,12 @@ const App = (() => {
     const play = () => {
       playing = true;
       drawFrame(0);
-      timerInt = setInterval(() => {
+      setRouteTimer(setInterval(() => {
         idx = (idx + 1) % moments.length;
         drawFrame(idx);
-      }, 2000); // 每帧 2s，8 帧 ≈ 16s（接近 15s 目标）
+      }, 2000)); // 每帧 2s，8 帧 ≈ 16s（接近 15s 目标）
     };
-    const stop = () => { if (timerInt) { clearInterval(timerInt); timerInt = null; } playing = false; };
+    const stop = () => { clearRouteTimer(); playing = false; };
 
     content.appendChild(el('div', {}, [
       el('h3', { class: 'h3 mb-3', style: 'text-align:center;' }, ['人生蒙太奇 · 15 秒']),
@@ -2208,7 +2215,6 @@ const App = (() => {
     let chunks = [];
     let stream = null;
     let startTime = 0;
-    let timerInt = null;
     let recording = false;
 
     const render = (state, audioUrl, durationMs) => {
@@ -2271,19 +2277,19 @@ const App = (() => {
         startTime = Date.now();
         render('recording');
         let left = 5;
-        timerInt = setInterval(() => {
+        setRouteTimer(setInterval(() => {
           left--;
           const t = $('#rec-timer', content);
           if (t) t.textContent = String(Math.max(left, 0));
-          if (left <= 0) { clearInterval(timerInt); stopRec(); }
-        }, 1000);
+          if (left <= 0) { clearRouteTimer(); stopRec(); }
+        }, 1000));
       } catch (e) {
         toast('无法访问麦克风');
         closeRitual(overlay);
       }
     };
     const stopRec = () => {
-      if (timerInt) { clearInterval(timerInt); timerInt = null; }
+      clearRouteTimer();
       if (mediaRecorder && recording) { recording = false; mediaRecorder.stop(); }
     };
     const resetRec = () => {
@@ -2961,6 +2967,11 @@ const App = (() => {
   // ---------- 启动 ----------
   async function start() {
     await TSD.init();
+    // IDB 写入失败警示（配额超限/损坏）：首次失败 toast 一次，提示用户导出备份。
+    // 守"数据不丢"铁律：绝不静默吞掉持久化失败让用户以为已保存。
+    TSD.onSaveError(() => {
+      toast('存储写入失败，请导出备份');
+    });
     applyTheme(TSD.raw().settings && TSD.raw().settings.darkMode || 'auto');
     TSD.checkAchievements(); // 启动静默解锁已达成成就（不在启动时 toast，避免噪音）
     haptic('impact'); // 入场触觉（D-B1）：建立"进入仪式空间"的条件反射（native 生效，web 静默）

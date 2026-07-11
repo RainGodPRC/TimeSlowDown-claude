@@ -182,6 +182,26 @@ const TSD = (() => {
 
   let state = null;
   let _ready = null;
+  // save 失败标志：IDB 写入失败（配额超限/损坏）时置位，UI 层据此警示用户导出备份。
+  // 不在 data 层直接 toast（避免 UI 耦合 + 避免高频刷屏）；首次失败触发回调一次。
+  let _saveFailed = false;
+  let _onSaveError = null; // app.js 可注册回调（如 toast + 设置页警示）
+
+  function save() {
+    if (!state) return;
+    try {
+      idbSet(KEY, state).catch((e) => {
+        _saveFailed = true;
+        if (_onSaveError) _onSaveError(e);
+      });
+    } catch (e) {
+      _saveFailed = true;
+      if (_onSaveError) _onSaveError(e);
+    }
+  }
+  function hasSaveError() { return _saveFailed; }
+  function clearSaveError() { _saveFailed = false; }
+  function onSaveError(fn) { _onSaveError = fn; }
   // 启动时调用（app.js start 会 await）；从 IDB 载入，自动迁移旧 LocalStorage 数据
   function init() {
     if (_ready) return _ready;
@@ -225,10 +245,7 @@ const TSD = (() => {
       capsules: [], // 时间胶囊：封存给未来的自己（C-A 病毒引擎）
     };
   }
-  function save() {
-    if (!state) return;
-    try { idbSet(KEY, state).catch(() => {}); } catch (e) {}
-  }
+
 
   // ---------- moments ----------
   function getMoments() { return state.moments.slice(); }
@@ -418,11 +435,17 @@ const TSD = (() => {
   // ---------- T2-ClaudeCode 回访候选发现 ----------
   // 与 Codex T2（今天不像昨天）的核心差异：本调度指向"过去哪个瞬间值得带回"
   function pickEcho() {
-    // 当天已回访过则不再推（避免一天内重复）
     const today = new Date(); today.setHours(0,0,0,0);
     const todayMs = today.getTime();
-    const alreadyToday = state.revisits.some(r => r.at >= todayMs);
-    // 但允许今天再推一个新瞬间（回访是"带回"不是"记录"）
+    // 守"今天带回一个"的确定性：今天已选过 echo 且该瞬间仍在，直接返回同一个，不重选。
+    // 例外：用户今天已回访过该 echo，则允许换一个新瞬间（回访后有新 echo 浮出，但不刷新也稳）。
+    if (state.lastEchoDate === todayMs && state.lastEchoMomentId) {
+      const prev = state.moments.find(m => m.id === state.lastEchoMomentId);
+      const revisitedPrev = prev && state.revisits.some(r => r.momentId === prev.id && r.at >= todayMs);
+      if (prev && !revisitedPrev) return prev;
+      // 已回访过 prev → 落到下方重新选一个（不再 return）
+    }
+    // 允许今天再推一个新瞬间（回访是"带回"不是"记录"），不因今天已回访而停止推 echo。
     // 反信息茧房：综合 久未回访 + 重要 + 随机 + 情境
     const candidates = state.moments.filter(m => m.confirmed !== false);
     if (!candidates.length) return null;
@@ -879,7 +902,7 @@ const TSD = (() => {
       kind: m.kind,
       // 模糊时间（参 Codex 模糊时间一等数据）：只保留大致时段
       whenText: m.when ? m.when.text : '某天',
-      feelingTag: (m.audio ? null : null), // 不带音频（体积）
+      // 不带 audio（体积大、隐私）；feelingTag 不在信物协议（两端均未消费，避免误导）
       media: m.media || null,
       fromAt: Date.now(),
     };
@@ -973,6 +996,7 @@ const TSD = (() => {
   return {
     reset: () => { state = freshState(); save(); },
     init,
+    onSaveError, hasSaveError, clearSaveError,
     raw: () => state,
     getMoments, getMoment, addMoment, updateMoment, deleteMoment,
     setMomentAudio, getMomentAudio,
