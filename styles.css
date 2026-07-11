@@ -101,7 +101,7 @@
     --fg-faint: #6e6a5e;   /* 加深至对比度 ≥AA（浅色背景 #f7f4ef 上 ~4.6:1） */
     --line: rgba(0, 0, 0, 0.07);
     --line-strong: rgba(0, 0, 0, 0.13);
-    --accent: #9a4824;
+    --accent: #b85a32;        /* 浅色模式：深色 accent #f0b288 的同色相明度变体（暖橙非红棕），配白底 ≥4.5:1 AA */
     --accent-soft: #7c3618;
     --accent-glow: rgba(154, 72, 36, 0.16);
     --growth: #4a7a45;
@@ -126,7 +126,7 @@
   --fg-faint: #6e6a5e;   /* 浅色模式 fallback（prefers-color-scheme: light） */
   --line: rgba(0, 0, 0, 0.07);
   --line-strong: rgba(0, 0, 0, 0.13);
-  --accent: #9a4824;
+  --accent: #b85a32;        /* 浅色模式：深色 accent #f0b288 的同色相明度变体（暖橙非红棕），配白底 ≥4.5:1 AA */
   --accent-soft: #7c3618;
   --accent-glow: rgba(154, 72, 36, 0.16);
   --growth: #4a7a45;

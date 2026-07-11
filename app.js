@@ -1864,8 +1864,8 @@ const App = (() => {
     overlay.appendChild(content);
     document.body.appendChild(overlay);
     requestAnimationFrame(() => overlay.classList.add('is-in'));
-    // 自动播放
-    setTimeout(play, 100);
+    // 自动播放（reduced-motion 用户只显示第一帧，不自动轮播——守 a11y）
+    if (prefersReducedMotion()) drawFrame(0); else setTimeout(play, 100);
   }
 
   // canvas 文本换行
@@ -2863,6 +2863,14 @@ const App = (() => {
   }
 
   // 峰终仪式（沉浸锚点 · 峰终定律）：会话结尾 1.1s 微仪式，满足性终止、送人离开（守原则9）
+  // reduced-motion 判定（交付级 a11y）：同时尊重系统级 prefers-reduced-motion 和用户 app 内设置。
+  // JS 驱动的动画（peakEndRitual/life-mash/voice pulse）据此缩短或跳过动画，保留功能。
+  function prefersReducedMotion() {
+    const sys = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const user = TSD.raw() && TSD.raw().settings && TSD.raw().settings.reducedMotion;
+    return !!(sys || user);
+  }
+
   function peakEndRitual(text, sub, done) {
     const overlay = el('div', { class: 'ritual' }, [
       el('div', { class: 'ritual__mark' }, ['◈']),
@@ -2870,11 +2878,14 @@ const App = (() => {
       sub ? el('div', { class: 'ritual__sub muted' }, [sub]) : null,
     ]);
     document.body.appendChild(overlay);
+    // reduced-motion：跳过动画过渡，直接显示终态后短暂停留即关闭（保留仪式感但无运动）
+    const holdMs = prefersReducedMotion() ? 400 : 1100;
+    const fadeMs = prefersReducedMotion() ? 0 : 320;
     requestAnimationFrame(() => overlay.classList.add('is-in'));
     setTimeout(() => {
-      overlay.classList.remove('is-in');
-      setTimeout(() => { overlay.remove(); done && done(); }, 320);
-    }, 1100);
+      if (fadeMs) overlay.classList.remove('is-in');
+      setTimeout(() => { overlay.remove(); done && done(); }, fadeMs);
+    }, holdMs);
   }
 
   // 渐进展开（减文字过载）：headline 可见，点开看详情。原生 <details>，免 JS、自带 a11y
