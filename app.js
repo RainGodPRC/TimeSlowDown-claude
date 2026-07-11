@@ -3007,6 +3007,9 @@ const App = (() => {
     if (mode === 'dark') root.setAttribute('data-theme', 'dark');
     else if (mode === 'light') root.setAttribute('data-theme', 'light');
     else root.removeAttribute('data-theme'); // auto = 跟随系统
+    // 同步写 localStorage 缓存（防首屏 FOUC：index.html inline script 同步读取设 data-theme，
+    // 避免 IDB 异步加载期间用户自定义主题先以系统主题闪烁）
+    try { if (mode && mode !== 'auto') localStorage.setItem('tsd-theme', mode); else localStorage.removeItem('tsd-theme'); } catch (e) {}
     // 同步 theme-color meta（影响 Safari 地址栏 / 状态栏配色）
     const dark = '#0f1014', light = '#f7f4ef';
     const isDark = mode === 'dark' || (mode !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);

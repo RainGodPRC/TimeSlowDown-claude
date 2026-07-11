@@ -13,22 +13,34 @@
   <link rel="apple-touch-icon" href="icon-192.png">
   <link rel="icon" type="image/png" href="icon-192.png">
   <title>TimeSlowDown · 回访</title>
-  <link rel="stylesheet" href="styles.css?v=33">
+  <link rel="stylesheet" href="styles.css?v=34">
   <style>
     #boot{position:fixed;inset:0;background:#0f1014;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;z-index:9999;transition:opacity .35s ease}
     #boot.is-out{opacity:0;pointer-events:none}
     #boot .b-mark{font-size:56px;color:#d8c9a0}
     #boot .b-txt{color:#8a857c;font-size:13px;letter-spacing:1px}
     @media (prefers-color-scheme: light){ #boot{background:#f7f4ef} #boot .b-mark{color:#8a6f3a} #boot .b-txt{color:#6a655c} }
+    /* 用户显式选深色时，boot 跟随 data-theme 而非系统媒体查询（防 FOUC） */
+    html[data-theme="dark"] #boot{background:#0f1014}
+    html[data-theme="dark"] #boot .b-mark{color:#d8c9a0}
+    html[data-theme="dark"] #boot .b-txt{color:#8a857c}
+    html[data-theme="light"] #boot{background:#f7f4ef}
+    html[data-theme="light"] #boot .b-mark{color:#8a6f3a}
+    html[data-theme="light"] #boot .b-txt{color:#6a655c}
   </style>
+  <!-- 防首屏主题 FOUC：IDB 异步加载前，同步从 localStorage 读用户主题偏好设 data-theme，
+       让首屏背景与用户选择一致（深色模式用户不会先看到浅色闪一下） -->
+  <script>
+    (function(){try{var t=localStorage.getItem('tsd-theme');if(t)document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
+  </script>
 </head>
 <body>
   <div id="boot"><div class="b-mark">⊜</div><div class="b-txt">让走过的时间，长成你的人生</div></div>
   <div id="app" role="main"></div>
-  <script src="data.js?v=33"></script>
-  <script src="push.js?v=33"></script>
-  <script src="widget.js?v=33"></script>
-  <script src="app.js?v=33"></script>
+  <script src="data.js?v=34"></script>
+  <script src="push.js?v=34"></script>
+  <script src="widget.js?v=34"></script>
+  <script src="app.js?v=34"></script>
   <script>
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('sw.js').catch(() => {});
