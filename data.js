@@ -848,6 +848,90 @@ const TSD = (() => {
     return { lived: weeks, total: 52 * 90, current: weeks };
   }
 
+  // ---------- Shared Grove（2 人共享记忆池 · Day One Shared Journals 式）----------
+  // 哲学最险的锚点——引入社交，但无任何 feed/点赞/评论/排行榜/奖励。
+  // 守原则5：每人只经回声卡节奏看对方瞬间（一天一个），不能浏览对方全历史（反 FOMO）。
+  // 守原则7：1:1 二元，非公开。
+  // 同步层：无后端 → 离线"信物"模式（导出瞬间为可分享数据 → 对方导入）。
+  // 真正 CRDT 云同步留待 M2/生产后端。
+  function getGrove() {
+    if (!state.grove) state.grove = { paired: false, partnerName: null, received: [], lastEchoDate: 0, lastEchoMomentQuote: null };
+    return state.grove;
+  }
+  function setGrovePartner(name) {
+    const g = getGrove();
+    g.paired = true; g.partnerName = (name || 'ta').trim();
+    save(); return g;
+  }
+  function leaveGrove() {
+    state.grove = { paired: false, partnerName: null, received: [], lastEchoDate: 0, lastEchoMomentQuote: null };
+    save();
+  }
+  // 导出一个瞬间为"信物"（给 ta 带回去）—— 返回可分享的紧凑数据
+  function exportGroveGift(momentId) {
+    const m = getMoment(momentId);
+    if (!m) return null;
+    // 守原则7：只带原话+感受+大致时间，不带定位/人物原名（隐私最小化）
+    return {
+      type: 'tsd-grove-gift',
+      v: 1,
+      quote: m.quote,
+      kind: m.kind,
+      // 模糊时间（参 Codex 模糊时间一等数据）：只保留大致时段
+      whenText: m.when ? m.when.text : '某天',
+      feelingTag: (m.audio ? null : null), // 不带音频（体积）
+      media: m.media || null,
+      fromAt: Date.now(),
+    };
+  }
+  // 导入对方的"信物"到 grove
+  function importGroveGift(gift) {
+    if (!gift || gift.type !== 'tsd-grove-gift') return null;
+    const g = getGrove();
+    const item = {
+      id: 'gg-' + Date.now(),
+      quote: gift.quote,
+      kind: gift.kind || 'grass',
+      whenText: gift.whenText || '某天',
+      media: gift.media || null,
+      receivedAt: Date.now(),
+      surfaced: false, // 是否已通过回声卡 surface 过（守节奏：一天一个）
+      viewed: false,
+    };
+    g.received.unshift(item);
+    save(); return item;
+  }
+  // Grove 回声：每天 surface 一个未看过的对方瞬间（守原则5：一天一个，不浏览全历史）
+  function groveEcho() {
+    const g = getGrove();
+    if (!g.paired || !g.received.length) return null;
+    const today = new Date(); today.setHours(0,0,0,0);
+    const todayMs = today.getTime();
+    // 今天已 surface 过 → 返回同一个
+    if (g.lastEchoDate >= todayMs) {
+      return g.received.find(r => r.id === g.lastEchoId) || null;
+    }
+    // 找今天没 surface 过、没 viewed 的
+    const fresh = g.received.filter(r => !r.surfaced);
+    const pick = fresh[0] || g.received.find(r => !r.viewed);
+    if (pick) {
+      pick.surfaced = true;
+      g.lastEchoDate = todayMs;
+      g.lastEchoId = pick.id;
+      save();
+    }
+    return pick || null;
+  }
+  function markGroveViewed(itemId) {
+    const g = getGrove();
+    const it = g.received.find(r => r.id === itemId);
+    if (it) { it.viewed = true; save(); }
+  }
+  function getGroveReceived() {
+    const g = getGrove();
+    return g.received.slice();
+  }
+
   // ---------- Widget 状态（Finch 式 home-screen 活体存在）----------
   // 守原则5：badge/图标点只表"有/无新回声"，永不显示"漏了 X 天"/计数器/红点焦虑
   // 守原则9：widget 模式是 home-screen 入口的超精简单屏（echo 缩略 + 留半句提示），不延长会话
@@ -905,6 +989,7 @@ const TSD = (() => {
     reportStats,
     exportData, clearAll, lifeWeeks,
     widgetState, badgeState,
+    getGrove, setGrovePartner, leaveGrove, exportGroveGift, importGroveGift, groveEcho, markGroveViewed, getGroveReceived,
     makePackage, importPackage, applyImport,
     softDelete, hasTombstone, restoreTombstone, clearTombstone,
     onThisDay,

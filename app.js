@@ -827,6 +827,8 @@ const App = (() => {
       el('button', { class: 'btn btn--ghost btn--block mt-3', onclick: () => $('#moment-photo', view).click() }, [m.media ? '换一张影像' : '补一张影像（作回访入口）']),
       el('button', { class: 'btn btn--ghost btn--block mt-3', onclick: () => openSealSheet(m) }, ['封存给未来的自己 ✉']),
       el('button', { class: 'btn btn--ghost btn--block mt-3', onclick: () => openTellOneSheet(m) }, ['讲给一个人听 ✉']),
+      // Shared Grove：把这个瞬间作为"信物"送给 Grove 里的人（Day One Shared Journals 式）
+      el('button', { class: 'btn btn--ghost btn--block mt-3', onclick: () => openGroveGiftSheet(m) }, ['送给 ta 的 Grove ✉']),
       el('button', { class: 'btn btn--ghost btn--block mt-3', onclick: () => openShareSheet(m, revs, navigate) }, ['分享这一刻']),
       el('div', { class: 'divider' }),
       el('button', { class: 'btn btn--ghost btn--block mt-3', onclick: () => openEditMomentSheet(m, navigate) }, ['编辑这一刻']),
@@ -1244,6 +1246,8 @@ const App = (() => {
       el('div', { class: 'section-title' }, ['把 TSD 送给一个人']),
       el('div', { class: 'card' }, [
         el('div', { class: 'setting-row', onclick: () => navigate('invite') }, [el('div', { class: 'setting-row__main' }, [el('div', { class: 'setting-row__title' }, ['礼物式推荐']), el('div', { class: 'setting-row__sub' }, ['用你自己的话写给 ta · 零奖励、零积分'])]), el('div', { class: 'list-row__right' }, ['▸'])]),
+        // Shared Grove（2 人共享记忆池 · Day One Shared Journals 式 · 守原则5/7）
+        el('div', { class: 'setting-row', onclick: () => navigate('grove') }, [el('div', { class: 'setting-row__main' }, [el('div', { class: 'setting-row__title' }, ['共同的林子']), el('div', { class: 'setting-row__sub' }, ['和一个人的共享记忆 · 无 feed/无点赞/一天一个回声' + (TSD.getGrove().paired ? ' · 已和 ' + TSD.getGrove().partnerName : '')])]), el('div', { class: 'list-row__right' }, ['▸'])]),
       ]),
 
       el('div', { class: 'section-title' }, ['关于']),
@@ -1595,6 +1599,92 @@ const App = (() => {
   });
 
   // ============================================================
+  // 视图：grove · Shared Grove（2 人共享记忆池 · Day One Shared Journals 式）
+  // 守原则5/7：1:1 二元，无公开 feed/无点赞/无评论/无排行榜；每人只经回声卡节奏看对方瞬间（一天一个），不能浏览对方全历史（反 FOMO）
+  // 同步层：离线"信物"模式（导出/导入），真正 CRDT 云同步留待 M2/生产后端
+  // ============================================================
+  route('grove', ({ view, navigate }) => {
+    const g = TSD.getGrove();
+    view.appendChild(el('div', {}, [
+      el('div', { class: 'flex items-center justify-between mb-4' }, [
+        el('button', { class: 'btn btn--sm btn--ghost', onclick: () => history.back() }, ['‹ 返回']),
+      ]),
+      el('h2', { class: 'h2 mb-2' }, ['共同的林子']),
+      el('p', { class: 'muted mb-5', style: 'font-size:13px;line-height:1.6;' }, [
+        '一个只属于你和一个人的地方。', el('br'),
+        'ta 的瞬间，每天只以回声的节奏浮出一个——不能翻看 ta 的全部，没有点赞，没有排行。',
+      ]),
+
+      // 配对状态
+      !g.paired ? el('div', { class: 'card mb-3' }, [
+        el('div', { class: 'h3 mb-2' }, ['还没有和谁建立林子']),
+        el('p', { class: 'muted mb-4', style: 'font-size:13px;line-height:1.5;' }, ['给一个人起个名字（只你可见），把你的瞬间作为"信物"发给 ta。ta 导入后，就会出现在这里。']),
+        el('input', { id: 'grove-name', placeholder: '给 ta 起个名字（比如：老朋友）', style: 'width:100%;padding:12px;background:var(--bg-elev);border:1px solid var(--line-strong);border-radius:10px;margin-bottom:12px;' }),
+        el('button', { class: 'btn btn--primary btn--block', onclick: () => {
+          const n = ($('#grove-name', view) || {}).value;
+          if (!n || !n.trim()) { toast('起个名字吧'); return; }
+          TSD.setGrovePartner(n);
+          toast('林子已建好。把你的瞬间发给 ' + n.trim());
+          navigate('grove');
+        } }, ['建立林子']),
+        // 导入对方的信物
+        el('div', { class: 'divider', style: 'margin:16px 0;' }),
+        el('div', { class: 'muted', style: 'font-size:12px;margin-bottom:8px;' }, ['收到 ta 发来的信物？粘在下面：']),
+        el('textarea', { id: 'grove-import', placeholder: '把 ta 分享给你的信物文本粘在这里…', style: 'width:100%;min-height:60px;padding:10px;background:var(--bg-elev);border:1px solid var(--line-strong);border-radius:10px;font-size:12px;resize:none;' }),
+        el('button', { class: 'btn btn--ghost btn--sm btn--block mt-2', onclick: () => {
+          const txt = (($('#grove-import', view) || {}).value || '').trim();
+          if (!txt) { toast('先粘贴信物'); return; }
+          try {
+            const gift = JSON.parse(txt);
+            const item = TSD.importGroveGift(gift);
+            if (item) { haptic('success'); toast('ta 的瞬间已收到——明天它会以回声浮出'); navigate('grove'); }
+            else toast('信物格式不对');
+          } catch (e) { toast('信物格式不对'); }
+        } }, ['导入 ta 的信物']),
+      ]) : el('div', { class: 'card mb-3' }, [
+        el('div', { class: 'flex items-center justify-between' }, [
+          el('div', {}, [
+            el('div', { class: 'h3' }, ['和 ' + g.partnerName + ' 的林子']),
+            el('div', { class: 'muted', style: 'font-size:12px;margin-top:2px;' }, ['收到 ' + g.received.length + ' 个来自 ta 的瞬间']),
+          ]),
+          el('button', { class: 'btn btn--ghost btn--sm', onclick: () => { if (confirm('离开这片林子？已收到的瞬间会一起移除。')) { TSD.leaveGrove(); navigate('grove'); } } }, ['离开']),
+        ]),
+      ]),
+
+      // 今天的 Grove 回声（守原则5：一天一个，不浏览全历史）
+      g.paired && g.received.length ? (() => {
+        const echo = TSD.groveEcho();
+        return echo ? el('div', { class: 'card mb-3', style: 'border:1px solid var(--accent-glow, rgba(240,178,136,.3));' }, [
+          el('div', { class: 'echo-card__label' }, ['今天的 Grove 回声 · 来自 ' + g.partnerName]),
+          echo.media ? el('img', { src: echo.media, style: 'max-width:100%;border-radius:12px;margin:10px 0;' }) : null,
+          el('div', { class: 'serif', style: 'font-size:17px;line-height:1.5;margin:10px 0;color:var(--fg);' }, ['"' + echo.quote + '"']),
+          el('div', { class: 'muted', style: 'font-size:11px;' }, [echo.whenText + ' · ' + fmtRelative(echo.receivedAt) + '收到']),
+          el('button', { class: 'btn btn--ghost btn--sm mt-3', onclick: () => { TSD.markGroveViewed(echo.id); toast('已看过'); } }, ['我看见了']),
+        ]) : null;
+      })() : null,
+
+      // 收到过的瞬间（只显示已 surfaced 的，且只显示引文截断 + 时间，不展示全部 · 反 FOMO）
+      g.paired && g.received.length ? el('div', {}, [
+        el('div', { class: 'section-title' }, ['ta 发来的（只显示已浮出的）']),
+        el('div', { class: 'card' }, g.received.filter(r => r.surfaced).map(r =>
+          el('div', { class: 'list-row' }, [
+            el('div', { class: 'list-row__icon', style: 'background:var(--accent-glow);color:var(--accent);' }, [r.viewed ? '○' : '●']),
+            el('div', { class: 'list-row__main' }, [
+              el('div', { class: 'list-row__title serif', style: 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;' }, ['"' + truncate(r.quote, 24) + '"']),
+              el('div', { class: 'list-row__sub' }, [r.whenText + ' · ' + fmtRelative(r.receivedAt)]),
+            ]),
+          ])
+        )),
+      ]) : null,
+
+      el('p', { class: 'muted mt-5', style: 'font-size:11px;text-align:center;line-height:1.5;' }, [
+        '参 Day One Shared Journals · 但更克制：无 feed、无点赞、无评论、无排行。', el('br'),
+        '同步为离线信物模式；真正跨设备云同步留待 M2/生产后端。',
+      ]),
+    ]));
+  });
+
+  // ============================================================
   // 视图：report 重逢报告（C-D · Wrapped 反 Feed 版，反思性统计 + 怀旧重遇）
   // ============================================================
   route('report', ({ view, navigate }) => {
@@ -1894,6 +1984,40 @@ const App = (() => {
     ctx.fillText('TimeSlowDown · 让走过的时间长成你的人生', W / 2, H - 130);
     return c;
   }
+
+  // Shared Grove 信物导出 sheet（把这个瞬间打包成可分享的紧凑数据给 ta）
+  // 守原则7：1:1 二元；守隐私最小化：不带定位/人物原名
+  function openGroveGiftSheet(m) {
+    const g = TSD.getGrove();
+    const gift = TSD.exportGroveGift(m.id);
+    const giftText = gift ? JSON.stringify(gift) : '';
+    const content = el('div', {}, [
+      el('h3', { class: 'h3 mb-3' }, ['送给 ta 的 Grove']),
+      !g.paired ? el('p', { class: 'muted mb-3', style: 'font-size:13px;line-height:1.6;' }, ['你还没建立林子。先去 Grove 给 ta 起个名字，再回来发送。']) : el('p', { class: 'muted mb-3', style: 'font-size:13px;line-height:1.6;' }, ['把这一刻作为信物发给 ' + g.partnerName + '。ta 收到后，明天会以回声浮出——一天一个，不刷屏。']),
+      el('div', { class: 'card mb-3', style: 'background:var(--bg-elev);' }, [
+        el('div', { class: 'serif', style: 'font-size:14px;line-height:1.5;color:var(--fg);margin-bottom:6px;' }, ['"' + (m.quote || '') + '"']),
+        el('div', { class: 'muted', style: 'font-size:11px;' }, ['信物只含：原话 + 大致时间 + 照片（若有）。不带定位、不带人物原名。']),
+      ]),
+      g.paired ? el('div', {}, [
+        el('div', { class: 'muted', style: 'font-size:12px;margin-bottom:6px;' }, ['复制下面的信物文本，发给 ' + g.partnerName + '（ta 粘贴到 Grove 即可导入）：']),
+        el('textarea', { readonly: '', style: 'width:100%;min-height:80px;padding:10px;background:var(--bg-elev);border:1px solid var(--line-strong);border-radius:10px;font-size:10px;resize:none;font-family:var(--font-mono);color:var(--fg-mute);' }, [giftText]),
+        el('div', { class: 'flex gap-3 mt-3' }, [
+          el('button', { class: 'btn btn--primary btn--lg', style: 'flex:1', onclick: async () => {
+            try { await navigator.clipboard.writeText(giftText); toast('信物已复制——发给 ' + g.partnerName); }
+            catch (e) { toast('复制失败，请手动选择文本'); }
+          } }, ['复制信物']),
+          el('button', { class: 'btn btn--ghost btn--lg', style: 'flex:1', onclick: async () => {
+            if (navigator.share) { try { await navigator.share({ title: '来自 TSD 的信物', text: giftText }); } catch (e) {} }
+            else { try { await navigator.clipboard.writeText(giftText); toast('已复制（当前环境不支持系统分享）'); } catch (e) {} }
+          } }, ['系统分享']),
+        ]),
+      ]) : el('button', { class: 'btn btn--primary btn--block', onclick: () => { sheet_close(); location.hash = 'grove'; } }, ['去建立林子']),
+      el('p', { class: 'muted mt-3', style: 'font-size:11px;text-align:center;' }, ['守原则7：1:1 二元 · 无 feed/无点赞/无排行 · 一天一个回声']),
+    ]);
+    const overlay = sheet(content);
+    const sheet_close = () => { if (overlay && overlay._close) overlay._close(); };
+  }
+
   function openShareSheet(m, revs, navigate) {
     const cardSlot = el('div', { id: 'share-card-slot', class: 'mb-4' });
     const content = el('div', {}, [
