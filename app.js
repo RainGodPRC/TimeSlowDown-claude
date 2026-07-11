@@ -317,6 +317,10 @@ const App = (() => {
           el('button', { class: 'btn btn--primary mt-4', onclick: () => navigate('capture') }, ['留下第一个瞬间']),
         ]),
 
+        // 这一天 · 多年对照（On This Day · Day One 式签名特性）
+        // 守原则5/9：纯被动浮出，无 badge/无通知/无"还差几个"；同日多年不存在则什么都不显示
+        ...(onThisDayRail(navigate) || []),
+
         // 三个月对照假设 —— 本分支北极星的可视化
         el('div', { class: 'section-title' }, ['三个月回访固化']),
         el('div', { class: 'card' }, [
@@ -400,6 +404,29 @@ const App = (() => {
     if (echo.tags && echo.tags.includes('身体')) return '今天能不能再走 15 分钟？';
     if (echo.tags && echo.tags.includes('日常')) return '今天留意一下，有没有一个和那天不一样的细节。';
     return '今天做一件事的时候，多停 10 秒看看它。';
+  }
+
+  // 这一天 · 多年对照（On This Day · Day One 式签名特性）
+  // 纯被动：同日多年若存在则温和浮出 1-3 张缩略卡，无则返回 null（什么也不显示，无羞辱）
+  function onThisDayRail(navigate) {
+    const matches = TSD.onThisDay(3);
+    if (!matches || !matches.length) return null;
+    return [
+      el('div', { class: 'section-title' }, ['这一天，很多年前']),
+      el('div', { class: 'card' }, matches.map(({ m, yrsAgo }) =>
+        el('div', { class: 'list-row', onclick: () => navigate('moment/' + m.id) }, [
+          el('div', { class: 'list-row__icon', style: thicknessColor(m.id) }, [TSD.thickness(m.id) === 'thick' ? '◈' : '○']),
+          el('div', { class: 'list-row__main' }, [
+            el('div', { class: 'list-row__title serif', style: 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;' }, ['"' + truncate(m.quote, 24) + '"']),
+            el('div', { class: 'list-row__sub' }, [
+              yrsAgo + ' 年前的今天',
+              (m.people && m.people.length) ? ' · ' + m.people.join('、') : '',
+            ]),
+          ]),
+          el('div', { class: 'list-row__right' }, ['▸']),
+        ])
+      )),
+    ];
   }
 
   // 回声卡 —— 被带回的过去（opts.thread 存在时 = Zeigarnik 开放回路的"续昨天的引子"）
@@ -633,9 +660,11 @@ const App = (() => {
         localOnly: true,
       });
       clearInterval(timerInt);
-      // 4p "我也是"感受标签：有感受时进入标签微仪式，无感受直接 peakEnd
+      // 对话式回访（Day One Daily Chat 范式 · TSD 差异化：只锚定旧记忆）：
+      // 有感受时先邀请"和这一刻说三句"，再进标签微仪式；无感受直接 peakEnd。
+      // 守原则5：可选、单次、不诱导续杯。
       if (v) {
-        feelingTagRitual(id, v, navigate);
+        openRevisitDialogueSheet(id, navigate);
       } else {
         TSD.addRevisit(id, v);
         const neu = TSD.checkAchievements();
@@ -678,6 +707,38 @@ const App = (() => {
 
       el('div', { class: 'section-title' }, ['时间层叠（' + revs.length + ' 次回访）']),
 
+      // 与过去自己的对话记录（Life Note 式 · 单轮问答留痕作为"重逢印记"）
+      // 守原则5：只展示已发生的，不诱导"再来一次"；无计数/无排名
+      (() => {
+        const reunions = TSD.getReunions(id);
+        if (!reunions.length) return null;
+        return el('div', {}, [
+          el('div', { class: 'section-title' }, ['与那时的自己']),
+          el('div', { class: 'card' }, reunions.map(r =>
+            el('div', { class: 'moment-card__layer' }, [
+              el('div', { class: 'moment-card__layer-time' }, [fmtDate(r.at) + ' · 问']),
+              el('div', { class: 'serif', style: 'font-size:14px;color:var(--fg-soft);margin-bottom:6px;' }, ['"' + r.question + '"']),
+              el('div', { class: 'serif', style: 'font-size:14px;line-height:1.55;color:var(--fg);' }, ['"' + r.answer + '"']),
+            ])
+          )),
+        ]);
+      })(),
+
+      // 思维陷阱 reframe 注解（Moodnotes CBT · 已记下的认知重构）
+      (() => {
+        const notes = (m.reframeNotes && m.reframeNotes.length) ? m.reframeNotes : null;
+        if (!notes) return null;
+        return el('div', {}, [
+          el('div', { class: 'section-title' }, ['认出的陷阱']),
+          el('div', { class: 'card' }, notes.map(n =>
+            el('div', { class: 'moment-card__layer' }, [
+              el('div', { class: 'moment-card__layer-time' }, [fmtDate(n.at) + ' · ' + n.name]),
+              el('div', { class: 'serif', style: 'font-size:13px;line-height:1.55;color:var(--fg-soft);' }, ['换个问法：' + n.reframe]),
+            ])
+          )),
+        ]);
+      })(),
+
       revs.length ? el('div', { class: 'card' }, revs.map((r, i) =>
         el('div', { class: i > 0 ? 'moment-card__layer mt-3' : 'moment-card__layer' }, [
           el('div', { class: 'moment-card__layer-time' }, ['第 ' + (i + 1) + ' 次回访 · ' + fmtDate(r.at)]),
@@ -701,6 +762,9 @@ const App = (() => {
       })(),
 
       el('button', { class: 'btn btn--primary btn--lg btn--block mt-5', onclick: () => navigate('revisit/' + id) }, ['再回访一次']),
+      // 与过去自己对话（Life Note 式签名特性 · 仅 30 天前的旧瞬间出现）
+      // 守原则5：单轮问答即关，无持续聊天/无诱导；本地镜像 fallback，不伪造原文之外的事实
+      momentAgeDays(m) >= 30 ? el('button', { class: 'btn btn--ghost btn--block mt-3', onclick: () => openAskPastSelfSheet(m) }, ['问那时的自己 ✦']) : null,
       el('input', { type: 'file', accept: 'image/*', id: 'moment-photo', style: 'display:none;' }),
       el('button', { class: 'btn btn--ghost btn--block mt-3', onclick: () => $('#moment-photo', view).click() }, [m.media ? '换一张影像' : '补一张影像（作回访入口）']),
       el('button', { class: 'btn btn--ghost btn--block mt-3', onclick: () => openSealSheet(m) }, ['封存给未来的自己 ✉']),
@@ -725,6 +789,14 @@ const App = (() => {
 
   function kindLabel(k) { return { bloom: '高光', grass: '日常', night: '平淡' }[k] || '瞬间'; }
   function kindChipClass(k) { return { bloom: 'chip--bloom', grass: 'chip--growth', night: 'chip--night' }[k] || ''; }
+  // 瞬间年龄（天）——用于"问那时的自己"30 天门槛
+  function momentAgeDays(m) {
+    if (!m || !m.when || typeof m.when.start !== 'number' || m.when.start <= 0) {
+      // 退化到创建时间
+      return m ? (Date.now() - m.createdAt) / 86400000 : 0;
+    }
+    return (Date.now() / 1000 - m.when.start) / 86400;
+  }
 
   // ============================================================
   // 视图：wilderness 人生旷野
@@ -1931,6 +2003,12 @@ const App = (() => {
         } }, [selectedTag || customInput.value.trim() ? '分享感受卡' : '就这样']),
       ]),
       el('p', { class: 'muted mt-3', style: 'font-size:11px;text-align:center;' }, ['感受卡只含一个抽象词，零可识别信息 · 感知相似→分享（Liem）']),
+      // Emotion Grid 入口：想更精细地标此刻情绪（144 词象限 · Yale Mood Meter）
+      // 守原则5：可选、独立于分享词库；点了进入象限网格
+      el('button', { class: 'btn btn--ghost btn--sm btn--block mt-3', onclick: () => {
+        closeRitual(overlay);
+        openEmotionGridSheet(momentId, feeling, navigate);
+      } }, ['想更精细地标情绪 ▦']),
     ]));
 
     document.body.appendChild(overlay);
@@ -1953,6 +2031,295 @@ const App = (() => {
       });
     }
     peakEndRitual('这一层留住了', neu.length && !qm ? '又浮现一枚印记' : '被带回的这一刻，又厚了一层', () => navigate('today'));
+  }
+
+  // ============================================================
+  // Emotion Grid · 情绪粒度网格（How We Feel / Yale Mood Meter 范式）
+  // 与 FEELING_TAGS 并存：这里是内省侧的"此刻精细情绪"，非分享词。
+  // 守原则5：可选、不推送、不打分；只在用户回访后主动想细标时温和邀请。
+  // 守原则9：单次浮出，不延长会话；选完即闭。
+  // ============================================================
+  function openEmotionGridSheet(momentId, feeling, navigate) {
+    const overlay = el('div', { class: 'feeling-tag-ritual' });
+    const grid = TSD.EMOTION_GRID;
+    const quadrants = [
+      { key: 'hh', cls: 'emotion-quad--hh' },  // 右上 高昂·明亮
+      { key: 'hl', cls: 'emotion-quad--hl' },  // 左上 高涨·紧绷
+      { key: 'lh', cls: 'emotion-quad--lh' },  // 右下 低缓·温润
+      { key: 'll', cls: 'emotion-quad--ll' },  // 左下 低沉·灰雾
+    ];
+    let zoomed = null;        // 当前展开的象限 key
+    let selectedWord = null;  // 选中的词
+    let selectedQuad = null;  // 词所在象限
+
+    const content = el('div', { class: 'feeling-tag__content' }, [
+      el('div', { style: 'font-size:32px;margin-bottom:8px;text-align:center;' }, ['◍']),
+      el('h3', { class: 'h3 mb-2', style: 'text-align:center;' }, ['此刻更精确的情绪']),
+      el('p', { class: 'muted mb-4', style: 'font-size:13px;line-height:1.6;text-align:center;' }, [
+        '点一个象限，找一个最贴近的词。', el('br'),
+        '不需要每个都选——只想细标时才来。',
+      ]),
+    ]);
+
+    const gridWrap = el('div', { class: 'emotion-grid' });
+    const quadEls = {};
+    quadrants.forEach(q => {
+      const qd = grid[q.key];
+      const quadEl = el('button', {
+        class: 'emotion-quad ' + q.cls,
+        'aria-label': qd.name,
+        onclick: (e) => {
+          // 展开本象限词库；再次点同一象限则收起
+          if (zoomed === q.key) { zoomed = null; }
+          else { zoomed = q.key; selectedWord = null; selectedQuad = null; }
+          haptic('impact');
+          rerender();
+        },
+      }, [
+        el('div', { class: 'emotion-quad__name serif' }, [qd.name]),
+        el('div', { class: 'emotion-quad__hint muted' }, [zoomed === q.key ? '收起' : '点开找词']),
+      ]);
+      quadEls[q.key] = quadEl;
+      gridWrap.appendChild(quadEl);
+    });
+
+    const wordSlot = el('div', { class: 'emotion-words mt-4' });
+    const selectedSlot = el('div', { class: 'emotion-selected mt-4' });
+
+    const rerender = () => {
+      // 重置展开态视觉
+      Object.keys(quadEls).forEach(k => {
+        quadEls[k].classList.toggle('is-zoom', zoomed === k);
+      });
+      wordSlot.innerHTML = '';
+      selectedSlot.innerHTML = '';
+      if (zoomed) {
+        const qd = grid[zoomed];
+        qd.words.forEach(w => {
+          const isSel = (selectedWord === w);
+          wordSlot.appendChild(el('button', {
+            class: 'feeling-tag__chip' + (isSel ? ' is-selected' : ''),
+            onclick: (e) => {
+              selectedWord = w; selectedQuad = zoomed;
+              haptic('impact');
+              rerender();
+            },
+          }, [w]));
+        });
+      }
+      if (selectedWord) {
+        selectedSlot.appendChild(el('div', { class: 'card', style: 'padding:14px;text-align:center;' }, [
+          el('div', { class: 'muted', style: 'font-size:11px;margin-bottom:4px;' }, ['已选']),
+          el('div', { class: 'serif', style: 'font-size:18px;color:var(--accent);' }, [selectedWord]),
+          el('div', { class: 'muted', style: 'font-size:11px;margin-top:4px;' }, [grid[selectedQuad].name]),
+        ]));
+      }
+    };
+
+    content.appendChild(gridWrap);
+    content.appendChild(wordSlot);
+    content.appendChild(selectedSlot);
+    content.appendChild(el('div', { class: 'flex gap-3 mt-4' }, [
+      el('button', { class: 'btn btn--ghost btn--lg', style: 'flex:1', onclick: () => {
+        // 跳过细标，仍记录普通回访 + feeling
+        TSD.addRevisit(momentId, feeling);
+        finishRevisit(navigate);
+        closeRitual(overlay);
+      } }, ['跳过']),
+      el('button', { class: 'btn btn--primary btn--lg', style: 'flex:1', onclick: () => {
+        // 把精细词存进回访 feelingTag 字段（与分享词库同位，但这是内省词）
+        TSD.addRevisit(momentId, feeling, selectedWord);
+        haptic('success');
+        // Moodnotes 式思维陷阱：若落在不愉象限（hl/ll），温和邀请"那是什么陷阱"
+        // 守原则5：可选、不推送；点了进 reframe，不点直接结束
+        if (selectedWord && (selectedQuad === 'hl' || selectedQuad === 'll')) {
+          closeRitual(overlay);
+          openThinkingTrapsSheet(momentId, navigate);
+        } else {
+          finishRevisit(navigate);
+          closeRitual(overlay);
+        }
+      } }, [selectedWord ? '记住这一层' : '就这样']),
+    ]));
+    content.appendChild(el('p', { class: 'muted mt-3', style: 'font-size:11px;text-align:center;' }, [
+      '情绪粒度（emotion granularity）越细，越能辨认自己 · 参 Yale Mood Meter / How We Feel',
+    ]));
+
+    overlay.appendChild(content);
+    document.body.appendChild(overlay);
+    requestAnimationFrame(() => overlay.classList.add('is-in'));
+  }
+
+  // ============================================================
+  // 对话式回访（Day One Daily Chat / Rosebud / Life Note 范式）
+  // TSD 差异化楔子：对话只锚定被带回的旧记忆，不锚定今日日记。
+  // 3 题引导微对话，纯本地脚本（不调 LLM，无 key 暴露风险）。
+  // 守原则5：AI 只问、用户答、然后结束；无 streak/无评分/无"再来一次"。
+  // 守原则9：最后一题可"留半句给明天"——与 Zeigarnik 回路同构。
+  // ============================================================
+  function openRevisitDialogueSheet(momentId, navigate) {
+    const m = TSD.getMoment(momentId);
+    if (!m) return;
+    const overlay = el('div', { class: 'feeling-tag-ritual' });
+    const prompts = TSD.REVISIT_DIALOGUE_PROMPTS;
+    let step = 0;
+    const existing = TSD.getDialogue(momentId);
+    const answers = existing ? existing.answers.slice() : [];
+
+    const head = el('div', { class: 'feeling-tag__content' });
+    const render = () => {
+      head.innerHTML = '';
+      if (step >= prompts.length) {
+        // 完成 → 进入"我也是"感受标签微仪式（4p 病毒锚点 · 内部会 addRevisit + finishRevisit）
+        closeRitual(overlay);
+        feelingTagRitual(momentId, '', navigate);
+        return;
+      }
+      const prevAnswers = answers.slice(0, step).filter(Boolean);
+      head.appendChild(el('div', {}, [
+        el('div', { class: 'muted', style: 'font-size:11px;margin-bottom:6px;' }, ['第 ' + (step + 1) + ' / ' + prompts.length + ' 句']),
+        el('div', { class: 'serif', style: 'font-size:15px;color:var(--fg-soft);margin-bottom:10px;line-height:1.5;' }, ['"' + (m.quote || '') + '"']),
+        // 已答的前题（温柔回显，不压迫）
+        prevAnswers.length ? el('div', { class: 'card', style: 'padding:10px;margin-bottom:12px;background:var(--bg-elev);' }, prevAnswers.map((a, i) =>
+          el('div', { style: 'font-size:12px;color:var(--fg-mute);margin-bottom:6px;line-height:1.4;' }, [
+            el('span', { style: 'color:var(--fg-faint);' }, ['问：' + prompts[i]]),
+            el('br'), el('span', { style: 'color:var(--fg-soft);' }, ['答：' + a]),
+          ])
+        )) : null,
+        el('div', { class: 'serif', style: 'font-size:17px;color:var(--fg);line-height:1.55;margin-bottom:14px;' }, [prompts[step]]),
+        el('textarea', {
+          id: 'dialogue-input',
+          placeholder: step === prompts.length - 1 ? '可只写半句，留到明天…' : '随便写…',
+          style: 'width:100%;min-height:80px;padding:14px;background:var(--bg-elev);border:1px solid var(--line-strong);border-radius:14px;font-size:15px;resize:none;font-family:var(--font-serif);',
+        }, answers[step] ? [answers[step]] : []),
+        el('div', { class: 'flex gap-3 mt-3' }, [
+          el('button', { class: 'btn btn--ghost btn--lg', style: 'flex:1', onclick: () => {
+            TSD.setDialogueAnswer(momentId, step, '');
+            step++; render();
+          } }, ['跳过这句']),
+          el('button', { class: 'btn btn--primary btn--lg', style: 'flex:1', onclick: () => {
+            const v = ($('#dialogue-input', head) || {}).value;
+            TSD.setDialogueAnswer(momentId, step, v);
+            haptic('impact');
+            step++; render();
+          } }, [step === prompts.length - 1 ? '留住（可留半句）' : '下一句']),
+        ]),
+        el('button', { class: 'btn btn--ghost btn--sm btn--block mt-3', onclick: () => { closeRitual(overlay); } }, ['先到这里']),
+      ]));
+    };
+    overlay.appendChild(head);
+    document.body.appendChild(overlay);
+    requestAnimationFrame(() => overlay.classList.add('is-in'));
+    render();
+  }
+
+  // ============================================================
+  // 与过去自己对话（Life Note 式 · 单轮问答）
+  // 本地镜像 fallback：把用户的问题温和"还回去"，引导用户自己回到那一刻。
+  // 不伪造原文之外的"事实"。真实 LLM 增强留待后端代理（防 key 暴露）。
+  // 守原则5：单轮即关，无持续聊天/无诱导。
+  // ============================================================
+  function openAskPastSelfSheet(m) {
+    const overlay = el('div', { class: 'feeling-tag-ritual' });
+    const content = el('div', { class: 'feeling-tag__content' });
+    const render = (answer) => {
+      content.innerHTML = '';
+      content.appendChild(el('div', {}, [
+        el('div', { style: 'font-size:32px;margin-bottom:8px;text-align:center;' }, ['✦']),
+        el('h3', { class: 'h3 mb-2', style: 'text-align:center;' }, ['问那时的自己']),
+        el('div', { class: 'serif', style: 'font-size:14px;color:var(--fg-soft);background:var(--bg-elev);padding:14px;border-radius:12px;margin-bottom:16px;line-height:1.55;' }, ['"' + m.quote + '"']),
+        !answer ? el('div', {}, [
+          el('textarea', {
+            id: 'ask-input',
+            placeholder: '想问那时自己什么？（只问一句）',
+            style: 'width:100%;min-height:70px;padding:14px;background:var(--bg-elev);border:1px solid var(--line-strong);border-radius:14px;font-size:15px;resize:none;',
+          }),
+          el('div', { class: 'flex gap-3 mt-3' }, [
+            el('button', { class: 'btn btn--ghost btn--lg', style: 'flex:1', onclick: () => closeRitual(overlay) }, ['算了']),
+            el('button', { class: 'btn btn--primary btn--lg', style: 'flex:1', onclick: () => {
+              const q = ($('#ask-input', content) || {}).value;
+              if (!q || !q.trim()) { toast('写一句问的吧'); return; }
+              const ans = TSD.askPastSelf(m.id, q);
+              haptic('impact');
+              render(ans);
+            } }, ['问']),
+          ]),
+          el('p', { class: 'muted mt-3', style: 'font-size:11px;text-align:center;line-height:1.5;' }, [
+            '此时的回答来自本地镜像——它把你温柔地还回去，', el('br'),
+            '不替那时的自己编造原文之外的话。',
+          ]),
+        ]) : el('div', {}, [
+          el('div', { class: 'serif', style: 'font-size:14px;color:var(--fg-mute);margin-bottom:8px;' }, ['你问："' + answer.question + '"']),
+          el('div', { class: 'card', style: 'padding:16px;background:var(--bg-elev);' }, [
+            el('div', { class: 'muted', style: 'font-size:11px;margin-bottom:6px;' }, ['那时的你']),
+            el('div', { class: 'serif', style: 'font-size:15px;line-height:1.6;color:var(--fg);' }, ['"' + answer.answer + '"']),
+          ]),
+          el('button', { class: 'btn btn--primary btn--lg btn--block mt-4', onclick: () => { closeRitual(overlay); } }, ['就这样']),
+          el('p', { class: 'muted mt-3', style: 'font-size:11px;text-align:center;' }, ['这句对话已作为重逢印记收进那一刻。']),
+        ]),
+      ]));
+    };
+    overlay.appendChild(content);
+    document.body.appendChild(overlay);
+    requestAnimationFrame(() => overlay.classList.add('is-in'));
+    render(null);
+  }
+
+  // ============================================================
+  // 思维陷阱 / 认知重构选择器（Moodnotes CBT 范式）
+  // 仅在用户回访后、情绪落在不愉象限时温和邀请。完全可选、不推送。
+  // 守原则5：识别而非诊断；点了加一条 reframe 注解，不点直接结束。
+  // ============================================================
+  function openThinkingTrapsSheet(momentId, navigate) {
+    const overlay = el('div', { class: 'feeling-tag-ritual' });
+    const traps = TSD.THINKING_TRAPS;
+    let selected = null;
+    const head = el('div', { class: 'feeling-tag__content' });
+    const rerender = () => {
+      head.innerHTML = '';
+      head.appendChild(el('div', {}, [
+        el('div', { style: 'font-size:32px;margin-bottom:8px;text-align:center;' }, ['◇']),
+        el('h3', { class: 'h3 mb-2', style: 'text-align:center;' }, ['这一刻有没有一个"陷阱"？']),
+        el('p', { class: 'muted mb-4', style: 'font-size:13px;line-height:1.6;text-align:center;' }, [
+          '不是诊断，只是认一认。', el('br'),
+          '觉得贴得上就点——不贴也可以直接跳过。',
+        ]),
+        el('div', { class: 'feeling-tag__chips' }, traps.map(t =>
+          el('button', {
+            class: 'feeling-tag__chip' + (selected && selected.id === t.id ? ' is-selected' : ''),
+            onclick: (e) => { selected = t; haptic('impact'); rerender(); },
+          }, [t.name])
+        )),
+        selected ? el('div', { class: 'card mt-4', style: 'padding:14px;background:var(--bg-elev);' }, [
+          el('div', { class: 'serif', style: 'font-size:15px;color:var(--accent);margin-bottom:6px;' }, [selected.name]),
+          el('div', { class: 'muted', style: 'font-size:12px;margin-bottom:10px;line-height:1.5;' }, [selected.desc]),
+          el('div', { class: 'serif', style: 'font-size:14px;color:var(--fg);line-height:1.55;' }, ['换个问法：' + selected.reframe]),
+        ]) : null,
+        el('div', { class: 'flex gap-3 mt-4' }, [
+          el('button', { class: 'btn btn--ghost btn--lg', style: 'flex:1', onclick: () => {
+            finishRevisit(navigate);
+            closeRitual(overlay);
+          } }, ['跳过']),
+          el('button', { class: 'btn btn--primary btn--lg', style: 'flex:1', onclick: () => {
+            // 把 reframe 作为一条"层叠注解"追加到瞬间（复用 updateMoment，不打扰原话）
+            if (selected) {
+              const m = TSD.getMoment(momentId);
+              const notes = (m && m.reframeNotes) ? m.reframeNotes.slice() : [];
+              notes.push({ trap: selected.id, name: selected.name, reframe: selected.reframe, at: Date.now() });
+              TSD.updateMoment(momentId, { reframeNotes: notes });
+              haptic('success');
+            }
+            finishRevisit(navigate);
+            closeRitual(overlay);
+          } }, [selected ? '记下这个 reframe' : '没有陷阱']),
+        ]),
+        el('p', { class: 'muted mt-3', style: 'font-size:11px;text-align:center;' }, ['参 Moodnotes CBT · 识别认知扭曲，温和重构，不诊断']),
+      ]));
+    };
+    overlay.appendChild(head);
+    document.body.appendChild(overlay);
+    requestAnimationFrame(() => overlay.classList.add('is-in'));
+    rerender();
   }
 
   // 纯感受卡 canvas（4p · 最小暴露面：只含抽象感受词 + TSD 水印，零可识别信息）

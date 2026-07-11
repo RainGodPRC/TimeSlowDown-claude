@@ -442,6 +442,136 @@ const TSD = (() => {
     return picked;
   }
 
+  // ---------- "这一天"多年对照（On This Day · Day One 式签名特性）----------
+  // 守原则5：纯被动浮出，无通知/无 badge/无"还差几个"；同日多年若不存在则什么都不显示（无羞辱）
+  // 守原则9：只在 today 屏温和浮出一次，不抢占回声主交付
+  function onThisDay(limit = 3) {
+    const now = new Date();
+    const m = now.getMonth() + 1, d = now.getDate();
+    const matches = state.moments
+      .filter(x => x.when && typeof x.when.start === 'number' && x.when.start > 0)
+      .map(x => {
+        const wd = new Date(x.when.start * 1000);
+        // 同月同日、但年份更早（排除今年，排除今日回声本身）
+        if (wd.getMonth() + 1 !== m || wd.getDate() !== d) return null;
+        const yrsAgo = now.getFullYear() - wd.getFullYear();
+        if (yrsAgo < 1) return null;
+        return { m: x, yrsAgo, whenDate: wd };
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.yrsAgo - b.yrsAgo); // 由近及远
+    return matches.slice(0, limit);
+  }
+
+  // ---------- 情绪粒度网格（How We Feel / Yale Mood Meter 范式）----------
+  // 2 轴：能量（低↔高）× 愉悦（不愉↔愉），4 象限 144 词。
+  // 与 FEELING_TAGS 并存：FEELING_TAGS 是"回访感受的抽象分享词库"（病毒侧·零暴露面），
+  // EMOTION_GRID 是"此刻情绪的精细标签"（内省侧·非分享）。两者用途不同，不替代关系。
+  // 守原则5：不要求每天打、不打分、不排名；只在用户主动要细标时浮出。
+  const EMOTION_GRID = {
+    // 左上：高能量·不愉悦（焦虑/愤怒系）
+    hl: {
+      name: '高涨·紧绷', color: 'bloom',
+      words: ['焦虑','紧张','愤怒','烦躁','慌乱','挫败','急躁','恼火','担忧','惧怕','惶恐','不安','亢奋','咄咄逼人','憋屈','恼怒','气恼','惊慌','警惕','受挫','忿忿','躁动','纠结','坐立不安'],
+    },
+    // 右上：高能量·愉悦（兴奋/投入系）
+    hh: {
+      name: '高昂·明亮', color: 'accent',
+      words: ['兴奋','喜悦','激动','充实','投入','雀跃','热情','自豪','满足','鼓舞','兴高采烈','欢欣','振奋','被爱','幸运','骄傲','感激','被看见','有力量','期待','畅快','昂扬','热切','欢腾'],
+    },
+    // 左下：低能量·不愉悦（低落/疲惫系）
+    ll: {
+      name: '低沉·灰雾', color: 'night',
+      words: ['低落','疲惫','空虚','孤独','失落','消沉','低回','灰暗','无望','怅然','倦怠','沉闷','落寞','阴郁','麻木','沮丧','压抑','泄气','难过','悲伤','无助','黯然','怅惘','心灰'],
+    },
+    // 右下：低能量·愉悦（平静/满足系）
+    lh: {
+      name: '低缓·温润', color: 'growth',
+      words: ['平静','安宁','释然','舒适','松弛','满足','温柔','踏实','柔软','安心','怡然','恬淡','和煦','笃定','温润','祥和','闲适','自在','清澈','舒展','柔和','熨帖','清安','惬意'],
+    },
+  };
+
+  // 思维陷阱库（Moodnotes CBT 范式 · 6 个常见认知扭曲）
+  // 守原则5：可选、不推送、不要求每天；仅在用户回访后且感受落在不愉象限时温和邀请
+  const THINKING_TRAPS = [
+    { id: 'catastrophizing', name: '灾难化', desc: '把可能的不便想成必然的灾难', reframe: '最坏的情况真的会发生吗？它发生的概率有多大？' },
+    { id: 'blackwhite', name: '非黑即白', desc: '不是全好就是全坏，没有中间地带', reframe: '这件事里，有没有既不全好也不全坏的部分？' },
+    { id: 'mindreading', name: '读心术', desc: '笃定别人在想什么，但没有证据', reframe: '我有他们真的这么想的证据吗？还是我替他们下了结论？' },
+    { id: 'fortune', name: '算命', desc: '断言未来一定怎样，仿佛已发生', reframe: '我凭什么知道还没发生的事？换一个同样可能的结局会是什么？' },
+    { id: 'should', name: '应该陷阱', desc: '用"应该/必须"绑架自己和别人', reframe: '把"应该"换成"我希望"——事情还是那件事，但压迫感轻了。' },
+    { id: 'labeling', name: '贴标签', desc: '一次行为给自己整个人下定论', reframe: '我做了一件不漂亮的事，不等于我就是一个糟糕的人。' },
+  ];
+
+  // ---------- 对话式回访 + 与过去自己对话（AI 锚点 · 回访论点差异化） ----------
+  // 市场收敛于"AI 引导对话"（Day One Daily Chat / Rosebud / Life Note）。
+  // TSD 差异化：对话只锚定被带回的旧记忆，不锚定今日日记——这是 TSD 独有的楔子。
+  // 守原则5：AI 只问、用户答、然后结束；无 streak/无评分/无"再来一次"诱导。
+  // 守原则9：3 题微对话，单次会话不延长；最后一题可"留半句给明天"（Zeigarnik 兼容）。
+
+  // 对话式回访：固定 3 问引导（不调 LLM，纯本地脚本引导；LLM 增强可选）
+  const REVISIT_DIALOGUE_PROMPTS = [
+    '这一刻，你最先注意到的是什么？',
+    '和那时相比，你有什么不一样了？',
+    '想对那时的自己说一句话吗？（可只写半句，留到明天）',
+  ];
+  function getDialogue(mId) {
+    const m = getMoment(mId);
+    return (m && m.dialogue) ? m.dialogue : null;
+  }
+  function setDialogueAnswer(mId, index, text) {
+    const m = getMoment(mId);
+    if (!m) return null;
+    if (!m.dialogue) m.dialogue = { answers: [], createdAt: Date.now() };
+    if (!m.dialogue.answers) m.dialogue.answers = [];
+    m.dialogue.answers[index] = (text || '').trim();
+    // 第 3 题（index=2）若写了"半句"，自动成为明日引子（与 Zeigarnik 回路同构）
+    if (index === 2 && m.dialogue.answers[2] && m.dialogue.answers[2].length > 0) {
+      setThread(mId, m.dialogue.answers[2]);
+    }
+    save();
+    return m.dialogue;
+  }
+
+  // 与过去自己对话：单轮问答，AI 以"写那条瞬间的自己"的视角作答。
+  // 真实 LLM 调用留待后端代理（防 key 暴露，参 M1.2 暂缓说明）；
+  // 本地 fallback：基于瞬间文本的"镜像式"回应模板（不伪造未在原文中出现的信息）。
+  function askPastSelf(mId, question) {
+    const m = getMoment(mId);
+    if (!m || !question || !question.trim()) return null;
+    const q = question.trim();
+    // 镜像式本地回应：把用户的问题温和地"还回去"——引导用户自己回到那一刻
+    // 不编造原文之外的"事实"，守诚实原则
+    const quote = m.quote || '';
+    const lower = q.toLowerCase();
+    let mirror;
+    if (/为什么|为啥|why/i.test(q)) {
+      mirror = '我也不知道为什么。但当时我写下的是："' + quote + '"。你问我这个，是因为现在的你已经在重新看它了吗？';
+    } else if (/后悔|遗憾|不想|遗憾/i.test(q)) {
+      mirror = '我不能替你回答有没有后悔。我那时只记下了："' + quote + '"。你现在这样问，是不是已经有了一点答案？';
+    } else if (/想|希望|wish|希望/i.test(q)) {
+      mirror = '我那时想要的，可能就藏在这句里："' + quote + '"。现在的你，还想要同样的东西吗？';
+    } else if (/怎么|如何|how/i.test(q)) {
+      mirror = '具体怎么走到那一步，我自己也讲不清。我只留下这一句："' + quote + '"。你是想沿着它往回走一段吗？';
+    } else {
+      mirror = '我那时写的是："' + quote + '"。其余的我也说不准。你是想和我再待一会儿，还是想走了？';
+    }
+    const answer = {
+      question: q,
+      answer: mirror,
+      at: Date.now(),
+      mode: 'local-mirror', // 标识本地 fallback，区别于未来 LLM 增强
+    };
+    // 作为"重逢印记"追加（复用现有 imprints 结构，若有）
+    if (!m.reunions) m.reunions = [];
+    m.reunions.push(answer);
+    save();
+    return answer;
+  }
+  function getReunions(mId) {
+    const m = getMoment(mId);
+    return (m && m.reunions) ? m.reunions.slice() : [];
+  }
+
   // ---------- 周回访图谱 ----------
   function weekRevisits() {
     const now = new Date();
@@ -721,6 +851,10 @@ const TSD = (() => {
     exportData, clearAll, lifeWeeks,
     makePackage, importPackage, applyImport,
     softDelete, hasTombstone, restoreTombstone, clearTombstone,
+    onThisDay,
+    EMOTION_GRID, THINKING_TRAPS,
+    REVISIT_DIALOGUE_PROMPTS, getDialogue, setDialogueAnswer,
+    askPastSelf, getReunions,
     FEELING_TAGS, SEED_MOMENTS,
   };
 })();

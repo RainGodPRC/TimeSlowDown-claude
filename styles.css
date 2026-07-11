@@ -770,3 +770,43 @@ ul, ol { list-style: none; }
 }
 .feeling-tag__input::placeholder { color: var(--fg-faint); }
 .feeling-tag__preview { margin-bottom: var(--sp-3); }
+
+/* ============================================================
+   Emotion Grid · 情绪粒度网格（How We Feel / Yale Mood Meter）
+   2x2 象限：能量(高↔低) × 愉悦(不愉↔愉)。点象限展开词库。
+   ============================================================ */
+.emotion-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 4px;
+}
+.emotion-quad {
+  padding: 18px 14px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--line-strong);
+  background: var(--bg-elev);
+  cursor: pointer;
+  text-align: center;
+  transition: transform var(--dur-fast) var(--ease), border-color var(--dur-fast), box-shadow var(--dur-fast);
+  font: inherit; color: var(--fg-soft);
+}
+.emotion-quad:active { transform: scale(0.97); }
+.emotion-quad.is-zoom {
+  border-color: var(--line-accent);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+.emotion-quad__name { font-size: 15px; line-height: 1.3; }
+.emotion-quad__hint { font-size: 10px; margin-top: 4px; }
+/* 四象限配色（与 kind 色同族：accent 暖橙/growth 青草/bloom 花丛/night 雾） */
+.emotion-quad--hh { background: linear-gradient(135deg, rgba(240,178,136,0.10), rgba(240,178,136,0.02)); }
+.emotion-quad--hh.is-zoom { background: rgba(240,178,136,0.16); }
+.emotion-quad--hl { background: linear-gradient(135deg, rgba(212,135,158,0.10), rgba(212,135,158,0.02)); }
+.emotion-quad--hl.is-zoom { background: rgba(212,135,158,0.16); }
+.emotion-quad--lh { background: linear-gradient(135deg, rgba(143,185,138,0.10), rgba(143,185,138,0.02)); }
+.emotion-quad--lh.is-zoom { background: rgba(143,185,138,0.16); }
+.emotion-quad--ll { background: linear-gradient(135deg, rgba(107,122,150,0.10), rgba(107,122,150,0.02)); }
+.emotion-quad--ll.is-zoom { background: rgba(107,122,150,0.16); }
+.emotion-words {
+  display: flex; flex-wrap: wrap; gap: 6px; justify-content: center;
+}
