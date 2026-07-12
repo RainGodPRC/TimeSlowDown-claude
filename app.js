@@ -497,15 +497,15 @@ const App = (() => {
     const revs = TSD.getRevisits(m.id);
     const lastFeelingTag = revs.length ? revs[revs.length - 1].feelingTag : null;
     return el('div', { class: 'echo-card' }, [
-      el('div', { class: 'echo-card__label' }, [opts.thread ? '✦ 继续昨天的引子' : '今天的回声']),
+      el('div', { class: 'echo-card__label' }, [opts.thread ? t('echo.label_thread') : t('echo.label_echo')]),
       opts.thread ? el('div', { class: 'echo-card__thread' }, [
-        el('div', { class: 'muted', style: 'font-size:11px;margin-bottom:4px;' }, ['你昨天留了半句：']),
+        el('div', { class: 'muted', style: 'font-size:11px;margin-bottom:4px;' }, [t('echo.thread_hint')]),
         el('div', { class: 'serif', style: 'font-size:14px;line-height:1.55;color:var(--fg);' }, ['"' + opts.thread.text + '"']),
       ]) : null,
       el('div', { class: 'echo-card__quote serif' }, ['"' + m.quote + '"']),
       el('div', { class: 'echo-card__when' }, [
         fmtWhen(m.when),
-        revCount > 0 ? ' · 已回访 ' + revCount + ' 次' : ' · 第一次被带回',
+        revCount > 0 ? ' · ' + t('echo.revisited_count', { n: revCount }) : ' · ' + t('today.first_brought_back'),
       ]),
       lastFeelingTag ? el('div', { class: 'echo-card__mood' }, [lastFeelingTag]) : null,
       opts.media !== false && m.media ? el('img', { src: m.media, style: 'max-width:60%;border-radius:14px;margin:0 auto 20px;position:relative;' }) : null,
@@ -514,18 +514,18 @@ const App = (() => {
       m.audio ? el('div', { style: 'text-align:center;margin:0 auto 20px;' }, [
         el('button', {
           class: 'btn btn--ghost btn--sm',
-          'aria-label': '播放这一刻的声音',
+          'aria-label': t('echo.listen_voice'),
           onclick: (e) => {
             // 复用浏览器原生 audio，避免引入复杂播放器
             const a = document.createElement('audio');
             a.src = m.audio.dataUrl;
             a.currentTime = Math.max(0, (m.audio.durationMs - 2000) / 1000); // 末尾 2s
             a.play().catch(() => {});
-            e.target.textContent = '◉ 正在听…';
-            a.addEventListener('ended', () => { e.target.textContent = '↺ 再听这一刻的声音'; });
-            a.addEventListener('pause', () => { e.target.textContent = '↺ 再听这一刻的声音'; });
+            e.target.textContent = t('echo.listening');
+            a.addEventListener('ended', () => { e.target.textContent = t('echo.relisten'); });
+            a.addEventListener('pause', () => { e.target.textContent = t('echo.relisten'); });
           },
-        }, ['♪ 听这一刻的声音']),
+        }, [t('echo.listen_voice')]),
       ]) : null,
       el('div', { class: 'echo-card__actions' }, [
         el('button', { class: 'btn btn--primary btn--lg btn--block', onclick: opts.ctaAction }, [opts.ctaText || '带回这一刻']),
@@ -637,7 +637,7 @@ const App = (() => {
           revs.length ? el('div', { class: 'moment-card__layers' }, revs.map(r =>
             el('div', { class: 'moment-card__layer' }, [
               el('div', { class: 'moment-card__layer-time' }, [fmtDate(r.at) + ' · 回访' + (r.feelingTag ? ' · ' + r.feelingTag : '')]),
-              el('div', {}, [r.feeling || '（只停留了一会儿，没说话）']),
+              el('div', {}, [r.feeling || t('revisit.only_stayed')]),
             ])
           )) : null,
         ]),
@@ -645,32 +645,32 @@ const App = (() => {
 
       // 计时环
       el('div', { class: 'text-center mt-5', id: 'timer-wrap' }, [
-        ringPct(0, '10'),
-        el('div', { class: 'muted', style: 'font-size:12px;margin-top:8px;' }, ['秒后可以补一句"现在再看"']),
+        ringPct(0, t('revisit.timer_default')),
+        el('div', { class: 'muted', style: 'font-size:12px;margin-top:8px;' }, [t('revisit.timer_hint')]),
         // 守硬上限但尊重峰终：10 秒到点后出现"再停留 10 秒"（最多 1 次加时，防沉迷）
-        el('button', { class: 'btn btn--ghost btn--sm mt-3', id: 'extend-btn', style: 'display:none;', onclick: () => extendOnce() }, ['再停留一会儿']),
+        el('button', { class: 'btn btn--ghost btn--sm mt-3', id: 'extend-btn', style: 'display:none;', onclick: () => extendOnce() }, [t('revisit.extend_btn')]),
       ]),
 
       // 追加感受（10秒后激活）
       el('div', { class: 'mt-5', id: 'feeling-wrap' }, [
         el('textarea', {
           id: 'feeling-input',
-          placeholder: '现在再看，我想说…（可选，保留你的原话）',
+          placeholder: t('revisit.feeling_placeholder_full'),
           style: 'width:100%;min-height:80px;padding:14px;background:var(--bg-elev);border:1px solid var(--line-strong);border-radius:14px;font-size:15px;resize:none;',
           disabled: true,
         }),
         // 开放回路（Zeigarnik）：可选"留半句给明天"——低频、可忽略；勾选后这句未完感受成为明日引子
         el('label', { style: 'display:flex;align-items:flex-start;gap:8px;margin-top:12px;font-size:13px;color:var(--fg-mute);cursor:pointer;line-height:1.4;' }, [
           el('input', { type: 'checkbox', id: 'thread-check', disabled: true, style: 'margin-top:2px;accent-color:var(--accent);width:16px;height:16px;flex:none;' }),
-          el('span', {}, ['这句还没想完，明天再续（留个引子）']),
+          el('span', {}, [t('revisit.thread_check')]),
         ]),
         // 语音捕获（Stoic/Rosebud 式 · 情感密度最高）：10s 后浮出，可选录 5s
         el('div', { id: 'voice-wrap', style: 'display:none;margin-top:12px;' }, [
-          el('button', { class: 'btn btn--ghost btn--sm btn--block', id: 'voice-btn', onclick: () => openVoiceCaptureSheet(id) }, ['🎙 录一段声音（5 秒）']),
+          el('button', { class: 'btn btn--ghost btn--sm btn--block', id: 'voice-btn', onclick: () => openVoiceCaptureSheet(id) }, [t('revisit.voice_btn')]),
         ]),
         el('div', { class: 'flex gap-3 mt-3' }, [
-          el('button', { class: 'btn btn--ghost btn--lg', style: 'flex:1', onclick: () => navigate('today') }, ['就到这里']),
-          el('button', { class: 'btn btn--primary btn--lg', style: 'flex:1', id: 'save-feeling', disabled: true }, ['留下这一层']),
+          el('button', { class: 'btn btn--ghost btn--lg', style: 'flex:1', onclick: () => navigate('today') }, [t('revisit.stay_here')]),
+          el('button', { class: 'btn btn--primary btn--lg', style: 'flex:1', id: 'save-feeling', disabled: true }, [t('revisit.keep_layer')]),
         ]),
       ]),
     ]));
