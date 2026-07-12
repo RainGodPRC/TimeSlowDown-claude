@@ -1534,6 +1534,10 @@ const App = (() => {
           navigate('today');
         } }, [t('common.hold-on')]),
       ]),
+      el('div', { class: 'section-title mt-6' }, [t('import.dayone-title')]),
+      el('p', { class: 'muted mb-3', style: 'font-size:12px;line-height:1.6;' }, [t('import.dayone-sub')]),
+      el('input', { type: 'file', accept: '.json,application/json', id: 'cap-dayone', style: 'display:none;' }),
+      el('button', { class: 'btn btn--ghost btn--sm btn--block', onclick: () => $('#cap-dayone', view).click() }, [t('import.dayone-pick')]),
     ]));
     $('#cap-photo', view).addEventListener('change', async (e) => {
       const f = e.target.files[0];
@@ -1548,6 +1552,16 @@ const App = (() => {
         box.appendChild(el('img', { src: previewUrl, style: 'max-width:100%;max-height:220px;border-radius:12px;' }));
         toast(t('toast.image_selected'));
       } catch (err) { toast(err.message || t('moment.media_failed')); }
+    });
+    $('#cap-dayone', view).addEventListener('change', async (e) => {
+      const f = e.target.files[0];
+      if (!f) return;
+      toast(t('import.dayone-parsing'));
+      try {
+        const result = await importDayOneJSON(f);
+        toast(t('import.dayone-done', { n: result.imported, skip: result.skipped }));
+        if (result.imported > 0) navigate('today');
+      } catch (err) { toast(err.message || t('import.dayone-failed')); }
     });
   });
 
@@ -3020,7 +3034,59 @@ const App = (() => {
     });
   }
 
-  // ---------- 导入校验 / 删除回执 sheet ----------
+  // ---------- Day One JSON 导入器（竞品用户迁移路径，参 Day One 导出格式）----------
+  // Day One 导出 JSON：顶层 entries[]，每项含 creationDate/text/photos[]/tags[]/location。
+  // photos[] 每项可能含 binary(base64)/type；纯 JSON 导出（非 ZIP）时 photo 二进制可能缺失，跳过。
+  // 映射：creationDate→when.start, text→quote（截断 2000 字防膨胀）, tags→tags, location→place。
+  // 去重：按 Day One entry uuid（存 moment.sourceMeta.d1uuid），已导入跳过。
+  async function importDayOneJSON(file) {
+    const text = await file.text();
+    let data;
+    try { data = JSON.parse(text); } catch (_) { throw new Error(t('import.dayone-bad-json')); }
+    const entries = Array.isArray(data) ? data : (data.entries || []);
+    if (!Array.isArray(entries) || !entries.length) throw new Error(t('import.dayone-no-entries'));
+    const existing = new Set(TSD.getMoments().map(m => (m.sourceMeta && m.sourceMeta.d1uuid) || null).filter(Boolean));
+    let imported = 0, skipped = 0;
+    for (const e of entries) {
+      const uuid = e.uuid || e.identifier || null;
+      if (uuid && existing.has(uuid)) { skipped++; continue; }
+      const body = (typeof e.text === 'string' ? e.text : '').trim();
+      if (!body) { skipped++; continue; }
+      // Day One creationDate 是 ISO 字符串 "2023-05-18T14:30:00Z"
+      let start = null;
+      try { start = e.creationDate ? Math.floor(new Date(e.creationDate).getTime() / 1000) : null; } catch (_) {}
+      const whenText = start ? new Date(start * 1000).toLocaleDateString() : t('rel.someday');
+      // 图片：photos[] 含 binary(base64) → 存 media store → 引用
+      let media = null;
+      if (Array.isArray(e.photos) && e.photos.length) {
+        const ph = e.photos[0];
+        if (ph.binary && typeof ph.binary === 'string') {
+          try {
+            const blob = await TSD.dataUrlToBlob('data:' + (ph.type || 'image/jpeg') + ';base64,' + ph.binary);
+            const id = await TSD.saveMediaBlob(blob);
+            media = { id, type: ph.type || 'image/jpeg', w: null, h: null };
+          } catch (_) { media = null; }
+        }
+      }
+      const quote = body.length > 2000 ? body.slice(0, 1999) + '…' : body;
+      TSD.addMoment({
+        quote,
+        kind: 'grass',
+        people: [],
+        place: (e.location && e.location.localityName) ? e.location.localityName : null,
+        tags: Array.isArray(e.tags) ? e.tags.slice(0, 8) : [],
+        media,
+        when: { precision: 'day', text: whenText, start },
+        source: 'dayone-import',
+        sourceMeta: uuid ? { d1uuid: uuid } : null,
+      });
+      if (uuid) existing.add(uuid); // 循环内去重：同一次导入内的重复 uuid 跳过
+      imported++;
+    }
+    return { imported, skipped };
+  }
+
+
   function openImportSheet(pkg, navigate) {
     const r = TSD.importPackage(pkg);
     const content = el('div', {}, [
