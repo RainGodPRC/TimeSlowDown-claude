@@ -248,26 +248,26 @@ const App = (() => {
           id: 'birth-input',
         }),
         el('div', { class: 'flex gap-3' }, [
-          el('button', { class: 'btn btn--ghost btn--lg', style: 'flex:1', onclick: () => { next(); } }, ['跳过']),
+          el('button', { class: 'btn btn--ghost btn--lg', style: 'flex:1', onclick: () => { next(); } }, [t('onb.seed_skip')]),
           el('button', { class: 'btn btn--primary btn--lg', style: 'flex:1', onclick: () => {
             const v = $('#birth-input').value;
             if (v) TSD.setBirthYear(parseInt(v));
             next();
-          } }, ['下一步']),
+          } }, [t('onb.next')]),
         ]),
       ]),
       // 3: 周回顾情境
       () => el('div', { style: 'padding-top:12vh;' }, [
-        el('h2', { class: 'h2 mb-3' }, ['你希望什么时候回顾？']),
-        el('p', { class: 'muted mb-6' }, ['TSD 会在你选的时间，把这一周回访过的瞬间整理给你。']),
-        ...[['evening', '每晚睡前', '用 1 分钟重看今天被带回的瞬间'],
-            ['weekend', '周末', '用 5 分钟看这周反复回了哪几个'],
-            ['morning', '每天清晨', '用 1 分钟从昨天的回声开始新一天']].map(([id, t, sub]) =>
+        el('h2', { class: 'h2 mb-3' }, [t('onb.review_title')]),
+        el('p', { class: 'muted mb-6' }, [t('onb.review_intro')]),
+        ...[['evening', t('onb.review_evening_t'), t('onb.review_evening_sub')],
+            ['weekend', t('onb.review_weekend_t'), t('onb.review_weekend_sub')],
+            ['morning', t('onb.review_morning_t'), t('onb.review_morning_sub')]].map(([id, title, sub]) =>
           el('button', {
             class: 'card mb-3', style: 'width:100%;text-align:left;display:block;',
             onclick: () => { TSD.setReviewContext(id); next(); }
           }, [
-            el('div', { class: 'h3' }, [t]),
+            el('div', { class: 'h3' }, [title]),
             el('div', { class: 'muted', style: 'font-size:13px;margin-top:4px;' }, [sub]),
           ])
         ),
@@ -275,10 +275,10 @@ const App = (() => {
       // 4: 通知权限（最后才问）
       () => el('div', { class: 'text-center', style: 'padding-top:14vh;' }, [
         el('div', { style: 'font-size:40px;margin-bottom:20px;' }, ['🔔']),
-        el('h2', { class: 'h2 mb-3' }, ['打开"今天的回声"提醒？']),
-        el('p', { class: 'muted mb-6' }, ['每天一次，TSD 把你带回一个旧瞬间。默认隐藏人物和原文。']),
+        el('h2', { class: 'h2 mb-3' }, [t('onb.notify_title')]),
+        el('p', { class: 'muted mb-6' }, [t('onb.notify_intro')]),
         el('div', { class: 'flex gap-3' }, [
-          el('button', { class: 'btn btn--ghost btn--lg', style: 'flex:1', onclick: () => { TSD.setNotifications(false); finish(); } }, ['暂不']),
+          el('button', { class: 'btn btn--ghost btn--lg', style: 'flex:1', onclick: () => { TSD.setNotifications(false); finish(); } }, [t('onb.notify_off')]),
           el('button', { class: 'btn btn--primary btn--lg', style: 'flex:1', onclick: () => {
             TSD.setNotifications(true);
             // 立即请求权限 + 调度首条"今天的回声"推送（原生壳内生效，web 静默降级）
@@ -289,7 +289,7 @@ const App = (() => {
               });
             }
             finish();
-          } }, ['打开']),
+          } }, [t('onb.notify_on')]),
         ]),
       ]),
     ];
