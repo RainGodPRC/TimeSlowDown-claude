@@ -10,13 +10,13 @@ const PushHook = (() => {
     catch (e) { return null; }
   };
 
-  // Spark 文案库（永不 loss-frame）
-  const SPARK_MESSAGES = [
-    '今天有一个旧瞬间想再见你。',
-    '一年前的今天，你在想什么？',
-    '留下一件小事？',
-    '有一个瞬间在等你回去看它。',
-    '你上次回访的感受，今天可能又不一样了。',
+  // Spark 文案库（永不 loss-frame）—— i18n 双语
+  const SPARK_MESSAGES = () => [
+    t('push.spark_1'),
+    t('push.spark_2'),
+    t('push.spark_3'),
+    t('push.spark_4'),
+    t('push.spark_5'),
   ];
 
   // 智能时机：按用户历史活跃窗口（睡前/晨起锚点），非固定时刻
@@ -49,11 +49,12 @@ const PushHook = (() => {
       tomorrow.setDate(tomorrow.getDate() + 1);
       tomorrow.setHours(hour, minute, 0, 0);
 
-      const msg = SPARK_MESSAGES[Math.floor(Math.random() * SPARK_MESSAGES.length)];
+      const msgs = SPARK_MESSAGES();
+      const msg = msgs[Math.floor(Math.random() * msgs.length)];
 
       await ln.schedule({
         notifications: [{
-          title: '今天的回声',
+          title: t('push.title_echo'),
           body: msg,
           id: Date.now(),
           schedule: { at: tomorrow },
@@ -76,8 +77,8 @@ const PushHook = (() => {
 
       await ln.schedule({
         notifications: [{
-          title: title || '重逢',
-          body: body || '有一个旧瞬间想再见你。',
+          title: title || t('push.title_reunion'),
+          body: body || t('push.body_reunion'),
           id: Date.now(),
           schedule: { at: when },
           extra: { type: 'reunion' },

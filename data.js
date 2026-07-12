@@ -1013,13 +1013,13 @@ const TSD = (() => {
       echo: echo ? { id: echo.id, quote: echo.quote, kind: echo.kind, media: echo.media } : null,
       thread: thread ? { text: thread.thread.text, momentId: thread.moment.id } : null,
       phase,
-      // widget 演化主文案（Spark 式，永不 loss-frame）
+      // widget 演化主文案（Spark 式，永不 loss-frame · i18n 双语）
       headline: revisitedToday
-        ? '今天已重逢'
-        : (echo ? '有一个旧瞬间想再见你' : '还没有可回访的瞬间'),
+        ? t('widget.h_revisited')
+        : (echo ? t('widget.h_has_echo') : t('widget.h_empty')),
       sub: thread
-        ? '昨天留了半句，今天续上？'
-        : (revisitedToday ? '明天还会有一个' : (echo ? '点开待 10 秒' : '先留下一个瞬间')),
+        ? t('widget.sub_thread')
+        : (revisitedToday ? t('widget.sub_revisited') : (echo ? t('widget.sub_echo') : t('widget.sub_empty'))),
     };
   }
 

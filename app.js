@@ -408,24 +408,24 @@ const App = (() => {
     if (!TSD.raw().onboarded) { navigate('onboarding', { replace: true }); return; }
     const w = TSD.widgetState();
     view.appendChild(el('div', { class: 'widget-view' }, [
-      el('div', { class: 'widget-view__label muted' }, [w.phase === 'morning' ? '晨 · 今天' : w.phase === 'afternoon' ? '午 · 今天' : w.phase === 'evening' ? '夜 · 今天' : '深夜 · 今天']),
+      el('div', { class: 'widget-view__label muted' }, [w.phase === 'morning' ? t('widget.morning_today') : w.phase === 'afternoon' ? t('widget.afternoon_today') : w.phase === 'evening' ? t('widget.evening_today') : t('widget.deep_today')]),
       el('div', { class: 'widget-view__headline serif' }, [w.headline]),
       el('div', { class: 'widget-view__sub muted' }, [w.sub]),
       // echo 缩略（若有）—— 仅一行原话截断，无媒体（守最小暴露面）
       w.echo ? el('div', { class: 'widget-view__echo serif' }, ['"' + truncate(w.echo.quote, 28) + '"']) : null,
       // 留半句提示（若有 Zeigarnik 引子）
       w.thread ? el('div', { class: 'widget-view__thread' }, [
-        el('div', { class: 'muted', style: 'font-size:11px;' }, ['昨天留了半句：']),
+        el('div', { class: 'muted', style: 'font-size:11px;' }, [t('echo.thread_hint')]),
         el('div', { class: 'serif', style: 'font-size:13px;color:var(--fg-soft);line-height:1.4;' }, ['"' + truncate(w.thread.text, 30) + '"']),
       ]) : null,
       el('div', { class: 'widget-view__actions' }, [
         w.echo && !w.revisitedToday
-          ? el('button', { class: 'btn btn--primary btn--lg btn--block', onclick: () => navigate('revisit/' + w.echo.id) }, ['带回这一刻'])
+          ? el('button', { class: 'btn btn--primary btn--lg btn--block', onclick: () => navigate('revisit/' + w.echo.id) }, [t('today.bring_back')])
           : null,
         w.revisitedToday
-          ? el('div', { class: 'muted', style: 'text-align:center;font-size:13px;' }, ['今天已重逢。明天还会有一个。'])
+          ? el('div', { class: 'muted', style: 'text-align:center;font-size:13px;' }, [t('widget.h_revisited') + '。' + t('widget.sub_revisited') + '。'])
           : null,
-        el('button', { class: 'btn btn--ghost btn--sm btn--block', onclick: () => navigate('today') }, ['打开 TSD']),
+        el('button', { class: 'btn btn--ghost btn--sm btn--block', onclick: () => navigate('today') }, [t('widget.open_tsd')]),
       ]),
     ]));
   });
