@@ -908,6 +908,7 @@ const I18N = (() => {
 
     // ---------- aria / 小件 ----------
     'aria.week_cell': { zh: '查看这周的瞬间：{txt}', en: 'View this week\'s moment: {txt}' },
+    'aria.revisit_timer': { zh: '回访倒计时，剩余 {n} 秒', en: 'Revisit countdown, {n} seconds left' },
     'cal.mon': { zh: '一', en: 'M' },
     'cal.tue': { zh: '二', en: 'T' },
     'cal.wed': { zh: '三', en: 'W' },

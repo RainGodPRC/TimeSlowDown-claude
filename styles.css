@@ -860,3 +860,22 @@ ul, ol { list-style: none; }
   0%, 100% { opacity: 0.4; transform: scale(0.9); }
   50% { opacity: 1; transform: scale(1.15); }
 }
+
+/* ---------- a11y：全局焦点可见样式（WCAG 2.2 AA · 2.4.7 焦点可见）---------- */
+/* 键盘焦点时显示清晰 outline，鼠标点击不触发（:focus-visible 只匹配键盘） */
+button:focus-visible,
+a[href]:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+[tabindex]:focus-visible,
+[role="button"]:focus-visible,
+[role="dialog"]:focus-visible {
+  outline: 2px solid var(--accent, #d8c9a0);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+/* reduced-motion：聚焦时不加过渡动画 */
+@media (prefers-reduced-motion: reduce) {
+  *:focus-visible { transition: none !important; }
+}

@@ -155,26 +155,48 @@ const App = (() => {
   let toastTimer;
   function toast(msg) {
     let t = $('.toast:not(.toast--undo)');
-    if (!t) { t = el('div', { class: 'toast' }); document.body.appendChild(t); }
+    if (!t) {
+      t = el('div', { class: 'toast', role: 'status', 'aria-live': 'polite' });
+      document.body.appendChild(t);
+    }
     t.textContent = msg;
     t.classList.add('is-show');
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => t.classList.remove('is-show'), 2200);
   }
 
-  // 底部 sheet
+  // 底部 sheet（a11y：dialog 语义 + 焦点陷阱 + Esc 关闭 + 焦点返回触发器）
   function sheet(contentNode, opts = {}) {
     const backdrop = el('div', { class: 'sheet-backdrop' });
-    const s = el('div', { class: 'sheet' }, [
-      el('div', { class: 'sheet__handle' }),
+    const s = el('div', { class: 'sheet', role: 'dialog', 'aria-modal': 'true', tabindex: '-1' }, [
+      el('div', { class: 'sheet__handle', 'aria-hidden': 'true' }),
       contentNode,
     ]);
     document.body.appendChild(backdrop);
     document.body.appendChild(s);
-    requestAnimationFrame(() => { backdrop.classList.add('is-open'); s.classList.add('is-open'); });
+    const prevFocus = document.activeElement; // 关闭后焦点返回触发器
+    const focusableSel = 'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])';
+    const trap = (e) => {
+      if (e.key === 'Escape') { close(); return; }
+      if (e.key !== 'Tab') return;
+      const f = Array.from(s.querySelectorAll(focusableSel)).filter(el => el.offsetParent !== null);
+      if (!f.length) { e.preventDefault(); return; }
+      const first = f[0], last = f[f.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    };
+    document.addEventListener('keydown', trap);
+    requestAnimationFrame(() => {
+      backdrop.classList.add('is-open'); s.classList.add('is-open');
+      // 打开后焦点入 dialog，避免背景焦点泄漏
+      const first = s.querySelector(focusableSel);
+      if (first) first.focus(); else s.focus();
+    });
     const close = () => {
+      document.removeEventListener('keydown', trap);
       backdrop.classList.remove('is-open'); s.classList.remove('is-open');
       setTimeout(() => { backdrop.remove(); s.remove(); }, 300);
+      if (prevFocus && typeof prevFocus.focus === 'function') prevFocus.focus();
     };
     backdrop.addEventListener('click', close);
     s._close = close;
@@ -199,7 +221,8 @@ const App = (() => {
   }
   function fmtDate(ts) {
     if (!ts) return '';
-    return new Date(ts).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
+    const loc = (window.I18N && I18N.getLocale() === 'zh') ? 'zh-CN' : 'en-US';
+    return new Date(ts).toLocaleDateString(loc, { month: 'short', day: 'numeric' });
   }
 
   // ============================================================
@@ -559,13 +582,13 @@ const App = (() => {
   function ringPct(pct, label) {
     const r = 26, c = 2 * Math.PI * r;
     const off = c * (1 - Math.min(pct, 1));
-    return el('div', { class: 'ring' }, [
-      el('svg', { class: 'ring__svg', width: 64, height: 64, viewBox: '0 0 64 64' }, [
+    return el('div', { class: 'ring', role: 'timer', 'aria-label': t('aria.revisit_timer', { n: label }), 'aria-live': 'off' }, [
+      el('svg', { class: 'ring__svg', width: 64, height: 64, viewBox: '0 0 64 64', 'aria-hidden': 'true' }, [
         el('circle', { class: 'ring__track', cx: 32, cy: 32, r: r, fill: 'none', 'stroke-width': 4 }),
         el('circle', { class: 'ring__fill', cx: 32, cy: 32, r: r, fill: 'none', 'stroke-width': 4,
           'stroke-dasharray': c, 'stroke-dashoffset': off }),
       ]),
-      el('div', { class: 'ring__label nums' }, [String(label)]),
+      el('div', { class: 'ring__label nums', 'aria-hidden': 'true' }, [String(label)]),
     ]);
   }
 
@@ -1826,7 +1849,7 @@ const App = (() => {
 
   // Life Mash 生成器（canvas 序列帧 → 自动播放幻灯片）
   function openLifeMashSheet(moments) {
-    const overlay = el('div', { class: 'feeling-tag-ritual' });
+    const overlay = el('div', { class: 'feeling-tag-ritual', role: 'dialog', 'aria-modal': 'true', tabindex: '-1' });
     const content = el('div', { class: 'feeling-tag__content', style: 'max-width:420px;' });
     const canvas = el('canvas', { width: 540, height: 540, style: 'width:100%;max-width:420px;border-radius:14px;background:#0f1014;display:block;margin:0 auto;' });
     const ctx = canvas.getContext('2d');
@@ -1888,8 +1911,7 @@ const App = (() => {
     ]));
 
     overlay.appendChild(content);
-    document.body.appendChild(overlay);
-    requestAnimationFrame(() => overlay.classList.add('is-in'));
+    mountRitual(overlay);
     // 自动播放（reduced-motion 用户只显示第一帧，不自动轮播——守 a11y）
     if (prefersReducedMotion()) drawFrame(0); else setTimeout(play, 100);
   }
@@ -2273,7 +2295,7 @@ const App = (() => {
   // MediaRecorder API (PWA) + Capacitor Audio (native)；存储 base64 入 IndexedDB。
   // ============================================================
   function openVoiceCaptureSheet(momentId) {
-    const overlay = el('div', { class: 'feeling-tag-ritual' });
+    const overlay = el('div', { class: 'feeling-tag-ritual', role: 'dialog', 'aria-modal': 'true', tabindex: '-1' });
     const content = el('div', { class: 'feeling-tag__content' });
     let mediaRecorder = null;
     let chunks = [];
@@ -2411,8 +2433,7 @@ const App = (() => {
     };
 
     overlay.appendChild(content);
-    document.body.appendChild(overlay);
-    requestAnimationFrame(() => overlay.classList.add('is-in'));
+    mountRitual(overlay);
     render('idle');
   }
 
@@ -2533,7 +2554,7 @@ const App = (() => {
   // 触发：回访追加非空感受后，在 peakEndRitual 前插入可跳过的"给感受起个名字"
   // 守原则5：完全可选可跳过、不展示完成率；守原则9：不增加会话总时长；守原则7：分享成品非 Feed
   function feelingTagRitual(momentId, feeling, navigate) {
-    const overlay = el('div', { class: 'feeling-tag-ritual' });
+    const overlay = el('div', { class: 'feeling-tag-ritual', role: 'dialog', 'aria-modal': 'true', tabindex: '-1' });
     const tags = TSD.FEELING_TAGS;
     let selectedTag = null;
 
@@ -2615,13 +2636,26 @@ const App = (() => {
       } }, [t('moment.fine-grain-emotion')]),
     ]));
 
-    document.body.appendChild(overlay);
-    requestAnimationFrame(() => overlay.classList.add('is-in'));
+    mountRitual(overlay);
+  }
+
+  // ritual overlay 挂载：appendChild + 入场动画 + prevFocus 记录 + Esc 关闭（a11y）
+  function mountRitual(overlay) {
+    overlay._prevFocus = document.activeElement;
+    overlay._keyHandler = (e) => { if (e.key === 'Escape') closeRitual(overlay); };
+    document.addEventListener('keydown', overlay._keyHandler);
+    mountRitual(overlay);
+    const first = overlay.querySelector('button, [tabindex]:not([tabindex="-1"])');
+    if (first) try { first.focus(); } catch (_) {}
   }
 
   function closeRitual(overlay) {
     overlay.classList.remove('is-in');
-    setTimeout(() => overlay.remove(), 320);
+    if (overlay._keyHandler) document.removeEventListener('keydown', overlay._keyHandler);
+    setTimeout(() => {
+      overlay.remove();
+      if (overlay._prevFocus && typeof overlay._prevFocus.focus === 'function') overlay._prevFocus.focus();
+    }, 320);
   }
 
   function finishRevisit(navigate) {
@@ -2646,7 +2680,7 @@ const App = (() => {
   // 守原则9：单次浮出，不延长会话；选完即闭。
   // ============================================================
   function openEmotionGridSheet(momentId, feeling, navigate) {
-    const overlay = el('div', { class: 'feeling-tag-ritual' });
+    const overlay = el('div', { class: 'feeling-tag-ritual', role: 'dialog', 'aria-modal': 'true', tabindex: '-1' });
     const grid = TSD.EMOTION_GRID;
     const quadrants = [
       { key: 'hh', cls: 'emotion-quad--hh' },  // 右上 高昂·明亮
@@ -2752,8 +2786,7 @@ const App = (() => {
     ]));
 
     overlay.appendChild(content);
-    document.body.appendChild(overlay);
-    requestAnimationFrame(() => overlay.classList.add('is-in'));
+    mountRitual(overlay);
   }
 
   // ============================================================
@@ -2766,7 +2799,7 @@ const App = (() => {
   function openRevisitDialogueSheet(momentId, navigate) {
     const m = TSD.getMoment(momentId);
     if (!m) return;
-    const overlay = el('div', { class: 'feeling-tag-ritual' });
+    const overlay = el('div', { class: 'feeling-tag-ritual', role: 'dialog', 'aria-modal': 'true', tabindex: '-1' });
     const prompts = TSD.REVISIT_DIALOGUE_PROMPTS;
     let step = 0;
     const existing = TSD.getDialogue(momentId);
@@ -2814,8 +2847,7 @@ const App = (() => {
       ]));
     };
     overlay.appendChild(head);
-    document.body.appendChild(overlay);
-    requestAnimationFrame(() => overlay.classList.add('is-in'));
+    mountRitual(overlay);
     render();
   }
 
@@ -2826,7 +2858,7 @@ const App = (() => {
   // 守原则5：单轮即关，无持续聊天/无诱导。
   // ============================================================
   function openAskPastSelfSheet(m) {
-    const overlay = el('div', { class: 'feeling-tag-ritual' });
+    const overlay = el('div', { class: 'feeling-tag-ritual', role: 'dialog', 'aria-modal': 'true', tabindex: '-1' });
     const content = el('div', { class: 'feeling-tag__content' });
     const render = (answer) => {
       content.innerHTML = '';
@@ -2866,8 +2898,7 @@ const App = (() => {
       ]));
     };
     overlay.appendChild(content);
-    document.body.appendChild(overlay);
-    requestAnimationFrame(() => overlay.classList.add('is-in'));
+    mountRitual(overlay);
     render(null);
   }
 
@@ -2877,7 +2908,7 @@ const App = (() => {
   // 守原则5：识别而非诊断；点了加一条 reframe 注解，不点直接结束。
   // ============================================================
   function openThinkingTrapsSheet(momentId, navigate) {
-    const overlay = el('div', { class: 'feeling-tag-ritual' });
+    const overlay = el('div', { class: 'feeling-tag-ritual', role: 'dialog', 'aria-modal': 'true', tabindex: '-1' });
     const traps = TSD.THINKING_TRAPS;
     let selected = null;
     const head = el('div', { class: 'feeling-tag__content' });
@@ -2923,8 +2954,7 @@ const App = (() => {
       ]));
     };
     overlay.appendChild(head);
-    document.body.appendChild(overlay);
-    requestAnimationFrame(() => overlay.classList.add('is-in'));
+    mountRitual(overlay);
     rerender();
   }
 
@@ -2967,8 +2997,8 @@ const App = (() => {
   }
 
   function peakEndRitual(text, sub, done) {
-    const overlay = el('div', { class: 'ritual' }, [
-      el('div', { class: 'ritual__mark' }, ['◈']),
+    const overlay = el('div', { class: 'ritual', role: 'status', 'aria-live': 'polite', 'aria-atomic': 'true' }, [
+      el('div', { class: 'ritual__mark', 'aria-hidden': 'true' }, ['◈']),
       el('div', { class: 'ritual__text serif' }, [text]),
       sub ? el('div', { class: 'ritual__sub muted' }, [sub]) : null,
     ]);
