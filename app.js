@@ -3228,6 +3228,20 @@ const App = (() => {
     const isWidgetMode = new URLSearchParams(location.search).get('from') === 'widget';
     const path = isWidgetMode ? 'widget' : (location.hash.replace('#', '') || 'today');
     render(path);
+    // iOS 通知点击路由（Capacitor LocalNotifications）：点通知打开 app 后路由到对应内容
+    // echo（今日回声）→ today；reunion（胶囊/重遇）→ capsules。守"送回内容"非"只开 app"。
+    if (typeof PushHook !== 'undefined' && PushHook.isNative()) {
+      try {
+        const { LocalNotifications } = window.Capacitor && window.Capacitor.Plugins ? window.Capacitor.Plugins : {};
+        if (LocalNotifications && LocalNotifications.addListener) {
+          LocalNotifications.addListener('localNotificationActionPerformed', (ev) => {
+            const extra = ev && ev.notification && ev.notification.extra;
+            if (extra && extra.type === 'reunion') navigate('capsules');
+            else navigate('today');
+          });
+        }
+      } catch (_) {}
+    }
     const boot = document.getElementById('boot');
     const revealCaps = () => { if (newCaps.length) setTimeout(() => peakEndRitual(t('capsule.letter_arrived_title'), t('capsule.letters_from_past', {n: newCaps.length}), () => navigate('capsules')), 200); };
     if (boot) { boot.classList.add('is-out'); setTimeout(() => { boot.remove(); revealCaps(); }, 350); }
