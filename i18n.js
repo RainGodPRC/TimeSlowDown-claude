@@ -125,6 +125,11 @@ const I18N = (() => {
     'today.heatmap_more': { zh: '多', en: "more" },
     'today.action_title': { zh: '今天的一个小动作', en: "One small action for today" },
     'today.action_sub': { zh: '回访之后，可选地把过去变成今天的动力', en: "After revisiting, optionally turn the past into today's momentum" },
+    'today.empty_title': { zh: '还没有可回访的瞬间', en: 'No moments to revisit yet' },
+    'today.empty_sub': { zh: '先留下一个瞬间，TSD 之后会把它带回给你。', en: 'Leave one moment first — TSD will bring it back to you later.' },
+    'today.empty_cta': { zh: '留下第一个瞬间', en: 'Leave your first moment' },
+    'today.no_action': { zh: '今天没有建议。', en: 'No suggestion for today.' },
+    'today.cohort_why_body': { zh: '假设：被回访≥2次的瞬间，三个月后可讲述率显著高于未回访。这是本分支可证伪的北极星，不同于"能否讲出5个瞬间"的整体指标。', en: 'Hypothesis: moments revisited ≥2 times have a significantly higher tellability rate after three months than un-revisited ones. This is the falsifiable north star of this branch — different from the overall "can you tell 5 moments" metric.' },
 
     // ---------- revisit ----------
     'revisit.timer_default': { zh: '10', en: "10" },

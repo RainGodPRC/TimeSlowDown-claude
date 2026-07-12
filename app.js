@@ -179,12 +179,13 @@ const App = (() => {
     if (!ts) return '';
     const diff = Date.now() - ts;
     const d = Math.floor(diff / 86400000);
-    if (d === 0) return '今天';
-    if (d === 1) return '昨天';
-    if (d < 7) return d + '天前';
-    if (d < 30) return Math.floor(d / 7) + '周前';
-    if (d < 365) return Math.floor(d / 30) + '个月前';
-    return Math.floor(d / 365) + '年前';
+    if (d === 0) return t('rel.today');
+    if (d === 1) return t('rel.yesterday');
+    if (d < 7) return d === 1 ? t('rel.one_day_ago') : t('rel.days_ago', { d });
+    if (d < 30) { const w = Math.floor(d / 7); return w === 1 ? t('rel.one_week_ago') : t('rel.weeks_ago', { w }); }
+    if (d < 365) { const m = Math.floor(d / 30); return m === 1 ? t('rel.one_month_ago') : t('rel.months_ago', { m }); }
+    const y = Math.floor(d / 365);
+    return y === 1 ? t('rel.one_year_ago') : t('rel.years_ago', { y });
   }
   function fmtDate(ts) {
     if (!ts) return '';
@@ -324,11 +325,11 @@ const App = (() => {
           el('div', {}, [
             el('div', { class: 'section-title', style: 'margin:0;' }, [nowLabel()]),
             el('div', { class: 'muted', style: 'font-size:12px;margin-top:2px;' }, [
-              '本周已回访 ', el('strong', { class: 'nums' }, [String(stats.distinct)]), ' 个瞬间',
-              ' · ', el('span', { class: 'nums' }, [String(stats.total)]), ' 次',
+              t('today.week_revisited') + ' ', el('strong', { class: 'nums' }, [String(stats.distinct)]), ' ' + t('today.moments_unit'),
+              ' · ', el('span', { class: 'nums' }, [String(stats.total)]), ' ' + t('today.times_unit'),
             ]),
           ]),
-          el('button', { class: 'chip chip--accent', onclick: () => navigate('wilderness') }, ['人生周格 ▸']),
+          el('button', { class: 'chip chip--accent', onclick: () => navigate('wilderness') }, [t('today.life_grid') + ' ▸']),
         ]),
 
         // Fresh-Start 仪式（周一/月初）
@@ -337,14 +338,14 @@ const App = (() => {
         // 今天的回声 —— 主交付
         echo ? echoCard(echo, {
           navigate,
-          ctaText: '带回这一刻',
+          ctaText: t('today.bring_back'),
           ctaAction: () => navigate('revisit/' + echo.id),
           thread: (dueThread && dueThread.moment.id === echo.id) ? dueThread.thread : null,
         }) : el('div', { class: 'empty' }, [
           el('div', { class: 'empty__icon' }, ['⊘']),
-          el('div', { class: 'empty__title' }, ['还没有可回访的瞬间']),
-          el('div', { class: 'empty__sub' }, ['先留下一个瞬间，TSD 之后会把它带回给你。']),
-          el('button', { class: 'btn btn--primary mt-4', onclick: () => navigate('capture') }, ['留下第一个瞬间']),
+          el('div', { class: 'empty__title' }, [t('today.empty_title')]),
+          el('div', { class: 'empty__sub' }, [t('today.empty_sub')]),
+          el('button', { class: 'btn btn--primary mt-4', onclick: () => navigate('capture') }, [t('today.empty_cta')]),
         ]),
 
         // 这一天 · 多年对照（On This Day · Day One 式签名特性）
@@ -352,46 +353,46 @@ const App = (() => {
         ...(onThisDayRail(navigate) || []),
 
         // 三个月对照假设 —— 本分支北极星的可视化
-        el('div', { class: 'section-title' }, ['三个月回访固化']),
+        el('div', { class: 'section-title' }, [t('today.cohort_title')]),
         el('div', { class: 'card' }, [
           el('div', { class: 'flex items-center justify-between mb-3' }, [
             el('div', {}, [
-              el('div', { class: 'h3' }, ['回访 vs 可讲述']),
-              el('div', { class: 'muted', style: 'font-size:12px;' }, ['对照假设（M2 真实验证）']),
+              el('div', { class: 'h3' }, [t('today.cohort_subtitle')]),
+              el('div', { class: 'muted', style: 'font-size:12px;' }, [t('today.cohort_note')]),
             ]),
             ringPct(nd.thickCount / Math.max(nd.revisitedCount + nd.notRevisitedCount, 1), nd.thickCount),
           ]),
           el('div', { class: 'divider', style: 'margin:12px 0;' }),
           el('div', { class: 'flex gap-4' }, [
-            statBlock(String(nd.revisitedCount), '被回访过', 'accent'),
-            statBlock(String(nd.thickCount), '变厚(≥2次)', 'growth'),
-            statBlock(String(nd.notRevisitedCount), '未回访', 'mute'),
+            statBlock(String(nd.revisitedCount), t('today.cohort_revisited'), 'accent'),
+            statBlock(String(nd.thickCount), t('today.cohort_thick'), 'growth'),
+            statBlock(String(nd.notRevisitedCount), t('today.cohort_unrevisited'), 'mute'),
           ]),
-          disclosure('为什么是这个对照指标？', [
-            el('p', { class: 'muted', style: 'font-size:11px;line-height:1.5;' }, ['假设：被回访≥2次的瞬间，三个月后可讲述率显著高于未回访。这是本分支可证伪的北极星，不同于"能否讲出5个瞬间"的整体指标。']),
+          disclosure(t('today.cohort_why'), [
+            el('p', { class: 'muted', style: 'font-size:11px;line-height:1.5;' }, [t('today.cohort_why_body')]),
           ]),
         ]),
 
         // 重逢印记（Codex 雾中范式：惊喜，非打卡；安静模式时隐藏）
         ...(TSD.raw().settings && TSD.raw().settings.quietMode ? [] : [
-          el('div', { class: 'section-title' }, ['重逢印记']),
+          el('div', { class: 'section-title' }, [t('today.imprints_title')]),
           milestoneCard(),
         ]),
 
         // 本周回访过的瞬间
-        el('div', { class: 'section-title' }, ['本周回访图谱']),
+        el('div', { class: 'section-title' }, [t('today.week_graph')]),
         weekGraph(navigate),
 
         // 回访日历热力图（Stoic/Day One 式 · 近 8 周回访密度可视化）
-        el('div', { class: 'section-title' }, ['回访日历']),
+        el('div', { class: 'section-title' }, [t('today.heatmap_title')]),
         revisitHeatmap(),
 
         // 今日微小行动（原则6：导向行动）
-        el('div', { class: 'section-title' }, ['今天的一个小动作']),
+        el('div', { class: 'section-title' }, [t('today.action_title')]),
         el('div', { class: 'card card--glass' }, [
-          el('div', { class: 'muted', style: 'font-size:12px;margin-bottom:6px;' }, ['回访之后，可选地把过去变成今天的动力']),
+          el('div', { class: 'muted', style: 'font-size:12px;margin-bottom:6px;' }, [t('today.action_sub')]),
           el('div', { class: 'serif', style: 'font-size:16px;line-height:1.5;' }, [
-            echo ? todayActionHint(echo) : '今天没有建议。'
+            echo ? todayActionHint(echo) : t('today.no_action')
           ]),
         ]),
       ])
@@ -432,11 +433,11 @@ const App = (() => {
   function nowLabel() {
     const h = new Date().getHours();
     const d = new Date().getDay();
-    const wd = d === 0 || d === 6 ? '周末' : '工作日';
-    if (h < 6) return '深夜 · ' + wd;
-    if (h < 12) return '清晨 · ' + wd;
-    if (h < 18) return '午后 · ' + wd;
-    return '夜晚 · ' + wd;
+    const wd = d === 0 || d === 6 ? t('weekday.weekend') : t('weekday.weekday');
+    if (h < 6) return t('phase.deep') + ' · ' + wd;
+    if (h < 12) return t('phase.morning') + ' · ' + wd;
+    if (h < 18) return t('phase.afternoon') + ' · ' + wd;
+    return t('phase.evening') + ' · ' + wd;
   }
 
   // Fresh-Start 仪式（B-D / Dai 2014 temporal landmarks）：周一/月初温和重启点
