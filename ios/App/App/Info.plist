@@ -51,6 +51,8 @@
 	<string>用于把重逢卡、人生蒙太奇等分享成品保存到你的相册。仅在你主动保存时写入，不上传。</string>
 	<key>NSCameraUsageDescription</key>
 	<string>用于在留下瞬间时拍摄一张照片作为未来的回访入口。仅本机存储，不上传。</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>用于给瞬间录制一段 10 秒的语音回声——回访时重温你当时的声音。录音仅存于本机，不上传任何服务器。</string>
 	<key>UIRequiresFullScreen</key>
 	<true/>
 	<key>LSApplicationCategoryType</key>
