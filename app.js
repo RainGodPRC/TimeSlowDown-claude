@@ -1753,19 +1753,19 @@ const App = (() => {
     };
     view.appendChild(el('div', {}, [
       el('div', { class: 'flex items-center justify-between mb-4' }, [el('button', { class: 'btn btn--sm btn--ghost', onclick: () => history.back() }, ['‹ 返回'])]),
-      el('h2', { class: 'h2 mb-2' }, ['重逢报告']),
-      el('p', { class: 'muted mb-5', style: 'font-size:13px;line-height:1.6;' }, ['你的时间，被回访成了什么样。每张都可分享——不打分、不排行、不与他人比。']),
-      card('stat', { headline: s.momentCount, label: '个瞬间，被你留下', onShare: () => shareStatCard(s.momentCount, '个瞬间，被你留下') }),
-      card('stat', { headline: s.revisitCount, label: '次，你被带回过去', onShare: () => shareStatCard(s.revisitCount, '次，你被带回过去') }),
-      s.crossYearRevisits ? card('stat', { headline: s.crossYearRevisits, label: '次，你重逢了多年前的旧时光', onShare: () => shareStatCard(s.crossYearRevisits, '次，重逢多年前的旧时光') }) : null,
-      s.thickestQuote ? card('quote', { title: '你最常回到的瞬间', quote: s.thickestQuote, sub: '被回访 ' + s.thickestCount + ' 次', m: { quote: s.thickestQuote, when: { text: '回访 ' + s.thickestCount + ' 次' } } }) : null,
-      s.topPerson ? card('stat', { headline: s.topPerson, label: '你反复回到的人', onShare: () => shareStatCard(s.topPerson, '你反复回到的人') }) : null,
-      s.earliest ? card('quote', { title: '一切的起点', quote: s.earliest.quote, sub: '最早记录 · ' + fmtRelative(s.earliest.createdAt), m: s.earliest }) : null,
-      s.topFeelingTag ? card('stat', { headline: s.topFeelingTag, label: '你最常回到的感受', onShare: () => shareStatCard(s.topFeelingTag, '你最常回到的感受') }) : null,
+      el('h2', { class: 'h2 mb-2' }, [t('report.title')]),
+      el('p', { class: 'muted mb-5', style: 'font-size:13px;line-height:1.6;' }, [t('report.intro')]),
+      card('stat', { headline: s.momentCount, label: t('report.moments_kept'), onShare: () => shareStatCard(s.momentCount, t('report.moments_kept')) }),
+      card('stat', { headline: s.revisitCount, label: t('report.times_brought_back'), onShare: () => shareStatCard(s.revisitCount, t('report.times_brought_back')) }),
+      s.crossYearRevisits ? card('stat', { headline: s.crossYearRevisits, label: t('report.cross_year'), onShare: () => shareStatCard(s.crossYearRevisits, t('report.cross_year_short')) }) : null,
+      s.thickestQuote ? card('quote', { title: t('report.thickest_title'), quote: s.thickestQuote, sub: t('report.thickest_sub', { n: s.thickestCount }), m: { quote: s.thickestQuote, when: { text: t('report.thickest_sub', { n: s.thickestCount }) } } }) : null,
+      s.topPerson ? card('stat', { headline: s.topPerson, label: t('report.top_person'), onShare: () => shareStatCard(s.topPerson, t('report.top_person')) }) : null,
+      s.earliest ? card('quote', { title: t('report.earliest_title'), quote: s.earliest.quote, sub: t('report.earliest_sub') + fmtRelative(s.earliest.createdAt), m: s.earliest }) : null,
+      s.topFeelingTag ? card('stat', { headline: s.topFeelingTag, label: t('report.top_feeling'), onShare: () => shareStatCard(s.topFeelingTag, t('report.top_feeling')) }) : null,
       // 感受天气图（Stoic 式情绪可视化 · 守原则5：不排名/不比较/不评判，只展示分布）
       Object.keys(s.feelingTagFreq).length >= 2 ? el('div', { class: 'card mb-3' }, [
-        el('div', { class: 'echo-card__label' }, ['感受天气']),
-        el('p', { class: 'muted', style: 'font-size:12px;margin:6px 0 16px;' }, ['你回访时的心情分布——没有好坏，只是天气。']),
+        el('div', { class: 'echo-card__label' }, [t('report.weather_title')]),
+        el('p', { class: 'muted', style: 'font-size:12px;margin:6px 0 16px;' }, [t('report.weather_sub')]),
         feelingWeatherChart(s.feelingTagFreq),
       ]) : null,
       // Life Mash（1SE 式蒙太奇 · 把最近回访的瞬间照片编译成 15s 幻灯片）
