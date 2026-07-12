@@ -160,7 +160,7 @@ const I18N = (() => {
     'revisit.keep_layer': { zh: '留下这一层', en: "Keep this layer" },
     'revisit.feeling_placeholder': { zh: '现在再看，我想说…', en: "Seeing it again, I want to say…" },
     'revisit.thread_check': { zh: '这句还没想完，明天再续（留个引子）', en: "Not finished with this — continue tomorrow (leave a thread)" },
-    'revisit.voice_btn': { zh: '🎙 录一段声音（5 秒）', en: "🎙 Record a sound (5 seconds)" },
+    'revisit.voice_btn': { zh: '🎙 录一段声音（最长 30 秒）', en: "🎙 Record a sound (up to 30 seconds)" },
     'revisit.can_add_or_not': { zh: '可以补一句了，也可以不补', en: "You can add a line now — or not" },
     'revisit.extend_btn': { zh: '再停留一会儿', en: "Stay a little longer" },
     'revisit.timer_hint': { zh: '秒后可以补一句"现在再看"', en: 'seconds until you can add a "seeing it again" line' },
@@ -439,13 +439,13 @@ const I18N = (() => {
     'common.selected': { zh: "已选", en: "Selected" },
     'today.bring-back': { zh: "带回这一刻", en: "Bring back this moment" },
     'grove.establish': { zh: "建立林子", en: "Establish a grove" },
-    'voice.start-record': { zh: "开始录音（5 秒）", en: "Start recording (5s)" },
+    'voice.start-record': { zh: "开始录音（最长 30 秒）", en: "Start recording (up to 30s)" },
     'common.current': { zh: "当前", en: "Current" },
     'settings.current-plan': { zh: "当前方案", en: "Current plan" },
-    'voice.record-unsupported': { zh: "当前环境不支持录音（iOS Safari 需原生壳，或用 HTTPS+授麦）", en: "Recording is not supported in this environment (iOS Safari needs a native shell, or HTTPS + mic permission)" },
+    'voice.record-unsupported': { zh: "当前环境不支持录音（需 HTTPS + 授予麦克风权限）", en: "Recording is not supported in this environment (requires HTTPS + microphone permission)" },
     'voice.record-for-moment': { zh: "录一段声音给这一刻", en: "Record a sound for this moment" },
     'voice.recorded-listen': { zh: "录好了。听一下？", en: "Recorded. Want to listen?" },
-    'voice.recording': { zh: "录音中…到 5 秒自动停", en: "Recording… auto-stops at 5s" },
+    'voice.recording': { zh: "录音中…到 30 秒自动停", en: "Recording… auto-stops at 30s" },
     'media.revisit-entry': { zh: "影像 · 回访入口", en: "Media · Revisit entry" },
     'media.revisit-entry-optional': { zh: "影像（可选 · 回访入口）", en: "Media (optional · revisit entry)" },
     'moment.fine-grain-emotion': { zh: "想更精细地标情绪 ▦", en: "Want to mark emotions more precisely ▦" },
@@ -837,7 +837,7 @@ const I18N = (() => {
     'install.widget_note': { zh: '原生 iOS WidgetKit（桌面小组件）待 Xcode hand-off · 当前为 PWA 安静 badge 版', en: 'Native iOS WidgetKit (home-screen widget) awaits Xcode hand-off · currently a PWA quiet-badge version' },
 
     // ---------- voice capture ----------
-    'voice.idle_hint_1': { zh: '5 秒就够。', en: '5 seconds is enough.' },
+    'voice.idle_hint_1': { zh: '几秒到 30 秒都行，短一点也够。', en: 'A few seconds to 30s — short is fine too.' },
     'voice.idle_hint_2': { zh: '以后再被带回时，这一刻会带着你的声音回来。', en: 'When you\'re brought back here again, this moment will return with your voice.' },
 
     // ---------- feeling tag ritual ----------

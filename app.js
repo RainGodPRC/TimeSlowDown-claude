@@ -2251,6 +2251,12 @@ const App = (() => {
     let stream = null;
     let startTime = 0;
     let recording = false;
+    // wav fallback 专用状态（iOS Safari 无 MediaRecorder webm 时启用）
+    let wavCtx = null;
+    let wavProc = null;
+    let wavInput = null;
+    let wavChunks = [];
+    const VOICE_MAX_SEC = 30;
 
     const render = (state, audioUrl, durationMs) => {
       content.innerHTML = '';
@@ -2270,7 +2276,7 @@ const App = (() => {
         children.push(el('button', { class: 'btn btn--ghost btn--sm btn--block mt-3', onclick: () => closeRitual(overlay) }, [t('common.skip')]));
       } else if (state === 'recording') {
         children.push(el('div', { class: 'voice-pulse' }, ['●']));
-        children.push(el('div', { class: 'nums', style: 'font-size:32px;color:var(--accent);text-align:center;margin:12px 0;', id: 'rec-timer' }, ['5']));
+        children.push(el('div', { class: 'nums', style: 'font-size:32px;color:var(--accent);text-align:center;margin:12px 0;', id: 'rec-timer' }, [String(VOICE_MAX_SEC)]));
         children.push(el('p', { class: 'muted', style: 'font-size:12px;text-align:center;' }, [t('voice.recording')]));
         children.push(el('button', { class: 'btn btn--ghost btn--lg btn--block mt-3', onclick: stopRec }, [t('common.stop')]));
       } else if (state === 'done') {
@@ -2295,29 +2301,47 @@ const App = (() => {
     const startRec = async () => {
       try {
         stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        chunks = [];
-        const mime = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : '';
-        mediaRecorder = new MediaRecorder(stream, mime ? { mimeType: mime } : {});
-        mediaRecorder.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
-        mediaRecorder.onstop = () => {
-          const blob = new Blob(chunks, { type: mime || 'audio/webm' });
-          const url = URL.createObjectURL(blob);
-          const durationMs = Date.now() - startTime;
-          if (stream) stream.getTracks().forEach(t => t.stop());
-          recording = false;
-          render('done', url, durationMs);
-        };
-        mediaRecorder.start();
-        recording = true;
+        chunks = []; wavChunks = [];
+        const webmOk = typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported('audio/webm');
         startTime = Date.now();
+        recording = true;
         render('recording');
-        let left = 5;
+        let left = VOICE_MAX_SEC;
         setRouteTimer(setInterval(() => {
           left--;
           const t = $('#rec-timer', content);
           if (t) t.textContent = String(Math.max(left, 0));
           if (left <= 0) { clearRouteTimer(); stopRec(); }
         }, 1000));
+        if (webmOk) {
+          // 路径 A：MediaRecorder + webm（Chromium/Android/桌面）
+          const mime = 'audio/webm';
+          mediaRecorder = new MediaRecorder(stream, { mimeType: mime });
+          mediaRecorder.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+          mediaRecorder.onstop = () => {
+            const blob = new Blob(chunks, { type: mime });
+            const url = URL.createObjectURL(blob);
+            const durationMs = Date.now() - startTime;
+            if (stream) stream.getTracks().forEach(t => t.stop());
+            recording = false;
+            render('done', url, durationMs);
+          };
+          mediaRecorder.start();
+        } else {
+          // 路径 B：AudioContext + ScriptProcessor 录 PCM → WAV（iOS Safari/WKWebView fallback）
+          const AC = window.AudioContext || window.webkitAudioContext;
+          wavCtx = new AC();
+          wavInput = wavCtx.createMediaStreamSource(stream);
+          // 4096 帧缓冲，单声道； ScriptProcessor 已废弃但 iOS Safari 仍是唯一稳定同步路径
+          wavProc = wavCtx.createScriptProcessor(4096, 1, 1);
+          wavProc.onaudioprocess = (e) => {
+            if (!recording) return;
+            const ch = e.inputBuffer.getChannelData(0);
+            wavChunks.push(new Float32Array(ch));
+          };
+          wavInput.connect(wavProc);
+          wavProc.connect(wavCtx.destination);
+        }
       } catch (e) {
         toast(t('toast.mic_denied'));
         closeRitual(overlay);
@@ -2325,11 +2349,34 @@ const App = (() => {
     };
     const stopRec = () => {
       clearRouteTimer();
-      if (mediaRecorder && recording) { recording = false; mediaRecorder.stop(); }
+      if (!recording) return;
+      recording = false;
+      if (mediaRecorder && mediaRecorder.state !== 'inactive') { mediaRecorder.stop(); return; }
+      // wav 路径：拼 PCM → 编码 WAV Blob
+      if (wavCtx && wavProc) {
+        const sr = wavCtx.sampleRate;
+        const total = wavChunks.reduce((n, a) => n + a.length, 0);
+        const merged = new Float32Array(total);
+        let off = 0;
+        for (const a of wavChunks) { merged.set(a, off); off += a.length; }
+        const blob = encodeWAV(merged, sr);
+        const url = URL.createObjectURL(blob);
+        const durationMs = Date.now() - startTime;
+        cleanupWav();
+        if (stream) stream.getTracks().forEach(t => t.stop());
+        render('done', url, durationMs);
+      }
+    };
+    const cleanupWav = () => {
+      try { if (wavProc) { wavProc.disconnect(); wavProc = null; } } catch (_) {}
+      try { if (wavInput) { wavInput.disconnect(); wavInput = null; } } catch (_) {}
+      try { if (wavCtx && wavCtx.state !== 'closed') wavCtx.close(); } catch (_) {}
+      wavCtx = null;
     };
     const resetRec = () => {
       if (stream) stream.getTracks().forEach(t => t.stop());
-      chunks = []; mediaRecorder = null;
+      chunks = []; wavChunks = []; mediaRecorder = null;
+      cleanupWav();
     };
 
     overlay.appendChild(content);
@@ -2346,6 +2393,26 @@ const App = (() => {
       r.onerror = rej;
       r.readAsDataURL(blob);
     });
+  }
+
+  // iOS Safari/WKWebView 对 MediaRecorder + audio/webm 支持极差（多数版本不支持）。
+  // 当 webm 不可用时，走 AudioContext + ScriptProcessorNode 录 PCM，本地编码 16-bit WAV。
+  // 原生壳后续可切 Capacitor Audio 插件；wav fallback 先解 iOS web 兼容（守"单文件 PWA"边界）。
+  function encodeWAV(float32Arr, sampleRate) {
+    const buffer = new ArrayBuffer(44 + float32Arr.length * 2);
+    const view = new DataView(buffer);
+    const writeStr = (off, s) => { for (let i = 0; i < s.length; i++) view.setUint8(off + i, s.charCodeAt(i)); };
+    writeStr(0, 'RIFF'); view.setUint32(4, 36 + float32Arr.length * 2, true); writeStr(8, 'WAVE');
+    writeStr(12, 'fmt '); view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true);
+    view.setUint32(24, sampleRate, true); view.setUint32(28, sampleRate * 2, true);
+    view.setUint16(32, 2, true); view.setUint16(34, 16, true); writeStr(36, 'data');
+    view.setUint32(40, float32Arr.length * 2, true);
+    let off = 44;
+    for (let i = 0; i < float32Arr.length; i++, off += 2) {
+      let s = Math.max(-1, Math.min(1, float32Arr[i]));
+      view.setInt16(off, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+    }
+    return new Blob([view], { type: 'audio/wav' });
   }
 
   // iOS 触觉反馈（沉浸锚点）：native 下 Capacitor 注入 Haptics，web 静默降级
