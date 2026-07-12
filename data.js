@@ -153,16 +153,50 @@ const TSD = (() => {
   // 内存态 state 同步读写不变，IDB 作后端：启动 async 载入，save 异步写回
   const DB_NAME = 'tsd-cc';
   const STORE = 'kv';
+  const MEDIA_STORE = 'media'; // v2 新增：媒体 Blob 独立 store，moment 里只存引用 {id,type,w,h}
   let _dbP = null;
   function idbOpen() {
     if (_dbP) return _dbP;
     _dbP = new Promise((resolve, reject) => {
-      const req = indexedDB.open(DB_NAME, 1);
-      req.onupgradeneeded = () => { const d = req.result; if (!d.objectStoreNames.contains(STORE)) d.createObjectStore(STORE); };
+      // v2：新增 media objectStore，把照片/语音从 dataURL 内联迁出为 Blob（解 33% 膨胀 + 留原图）
+      const req = indexedDB.open(DB_NAME, 2);
+      req.onupgradeneeded = (e) => {
+        const d = req.result;
+        if (!d.objectStoreNames.contains(STORE)) d.createObjectStore(STORE);
+        // v1→v2 升级（无中间版本）：建 media store。已有 kv 数据不动，迁移在 init() 异步进行。
+        if (!d.objectStoreNames.contains(MEDIA_STORE)) d.createObjectStore(MEDIA_STORE);
+      };
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => { _dbP = null; reject(req.error); };
     });
     return _dbP;
+  }
+  // 媒体 Blob 存取：key=mediaId（字符串），value=Blob。moment.media = {id,type,w,h} 引用。
+  function saveMediaBlob(blob) {
+    const id = 'm-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+    return idbOpen().then(db => new Promise((resolve, reject) => {
+      const tx = db.transaction(MEDIA_STORE, 'readwrite');
+      tx.objectStore(MEDIA_STORE).put(blob, id);
+      tx.oncomplete = () => resolve(id);
+      tx.onerror = () => reject(tx.error);
+    }));
+  }
+  function getMediaBlob(id) {
+    if (!id) return Promise.resolve(null);
+    return idbOpen().then(db => new Promise((resolve, reject) => {
+      const r = db.transaction(MEDIA_STORE, 'readonly').objectStore(MEDIA_STORE).get(id);
+      r.onsuccess = () => resolve(r.result || null);
+      r.onerror = () => reject(r.error);
+    }));
+  }
+  function deleteMediaBlob(id) {
+    if (!id) return Promise.resolve(true);
+    return idbOpen().then(db => new Promise((resolve) => {
+      const tx = db.transaction(MEDIA_STORE, 'readwrite');
+      tx.objectStore(MEDIA_STORE).delete(id);
+      tx.oncomplete = () => resolve(true);
+      tx.onerror = () => resolve(true); // 删失败不阻塞（如已不存在）
+    }));
   }
   function idbGet(key) {
     return idbOpen().then(db => new Promise((resolve, reject) => {
@@ -217,6 +251,9 @@ const TSD = (() => {
         try { parsed = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (_) {}
       }
       state = (parsed && typeof parsed === 'object') ? migrateState(parsed) : freshState();
+      // v2 媒体迁移：旧 dataURL（base64 内联）→ Blob 存 media store → moment 只留引用。
+      // 幂等：m.media?.id 已存在则跳过。中断安全：迁移未完成的 dataURL 留在原位，下次启动续迁。
+      await migrateMediaToBlob(state);
       return state;
     })();
     return _ready;
@@ -278,6 +315,69 @@ const TSD = (() => {
     return merged;
   }
 
+  // ---------- 媒体 dataURL↔Blob 转换工具（v2 重构）----------
+  // dataURL → Blob：fetch 解码（浏览器原生，支持 base64 data URI）
+  function dataUrlToBlob(dataUrl) {
+    return fetch(dataUrl).then(r => r.blob());
+  }
+  // 异步媒体 URL 解析（供 UI 用）：兼容旧 dataURL（string）和新引用 {id}。
+  // 旧 dataURL 直接返回；新引用从 media store 取 Blob→createObjectURL。
+  // 调用方用完应 URL.revokeObjectURL 回收（UI 短生命周期，泄漏可接受）。
+  function resolveMediaUrl(media) {
+    if (!media) return Promise.resolve(null);
+    if (typeof media === 'string') return Promise.resolve(media); // 旧 dataURL 或迁移期
+    if (media.id) return getMediaBlob(media.id).then(b => b ? URL.createObjectURL(b) : null);
+    return Promise.resolve(null);
+  }
+
+  // v2 迁移：把 state 里所有旧 dataURL 媒体转成 Blob 存入 media store，moment 改引用。
+  // 幂等 + 中断安全：每条迁移完立即 save 一次 state，崩溃后下次续迁。
+  let _mediaMigrating = false;
+  async function migrateMediaToBlob(st) {
+    if (_mediaMigrating) return; // 防重入
+    _mediaMigrating = true;
+    try {
+      const items = (st.moments || []).filter(m => m && (
+        (typeof m.media === 'string') ||
+        (m.audio && typeof m.audio.dataUrl === 'string')
+      ));
+      for (const m of items) {
+        // 照片 media
+        if (typeof m.media === 'string' && m.media.startsWith('data:')) {
+          try {
+            const blob = await dataUrlToBlob(m.media);
+            const id = await saveMediaBlob(blob);
+            m.media = { id, type: blob.type || 'image/jpeg', w: null, h: null, migrated: true };
+          } catch (_) { /* 单条失败保留 dataURL，下次续迁 */ }
+        }
+        // 语音 audio.dataUrl
+        if (m.audio && typeof m.audio.dataUrl === 'string' && m.audio.dataUrl.startsWith('data:')) {
+          try {
+            const blob = await dataUrlToBlob(m.audio.dataUrl);
+            const id = await saveMediaBlob(blob);
+            m.audio.mediaId = id;
+            delete m.audio.dataUrl;
+          } catch (_) { /* 单条失败保留 dataUrl，下次续迁 */ }
+        }
+      }
+      // grove received 项也可能带旧 dataURL media
+      if (st.grove && Array.isArray(st.grove.received)) {
+        for (const g of st.grove.received) {
+          if (g && typeof g.media === 'string' && g.media.startsWith('data:')) {
+            try {
+              const blob = await dataUrlToBlob(g.media);
+              const id = await saveMediaBlob(blob);
+              g.media = { id, type: blob.type || 'image/jpeg', w: null, h: null, migrated: true };
+            } catch (_) {}
+          }
+        }
+      }
+      save(); // 迁移结果落盘
+    } finally {
+      _mediaMigrating = false;
+    }
+  }
+
   // ---------- moments ----------
   function getMoments() { return state.moments.slice(); }
   function getMoment(id) { return state.moments.find(m => m.id === id); }
@@ -305,14 +405,27 @@ const TSD = (() => {
   // ---------- 语音捕获（Stoic/Rosebud/Day One 式 · 情感密度最高）----------
   // 回访后"按住录 5 秒"附到瞬间；未来回访 echo 卡自动播 2s 片段。
   // 守原则5：可选不强制；守原则9：不延长会话（限时录制）。
-  // 存储：base64 dataURL 入 IndexedDB（与影像同位），native 走 Capacitor Audio。
-  function setMomentAudio(id, dataUrl, durationMs) {
+  // 存储：Blob 入 media store，moment.audio 只留 {mediaId, durationMs, at} 引用（v2 重构）。
+  // 兼容：若调用方传 dataUrl（base64），自动转 Blob 存入再取 id（过渡期，新代码应直接传 mediaId）。
+  function setMomentAudio(id, mediaRef, durationMs) {
     const m = getMoment(id);
-    if (!m || !dataUrl) return null;
-    // 限长：录音超 30s 截断标记（防存储膨胀，与影像压缩同哲学）
-    m.audio = { dataUrl, durationMs: Math.min(durationMs || 0, 30000), at: Date.now() };
-    save();
-    return m.audio;
+    if (!m || !mediaRef) return null;
+    // 同步路径：调用方已传 mediaId（v2 新链路）
+    if (typeof mediaRef === 'string') {
+      m.audio = { mediaId: mediaRef, durationMs: Math.min(durationMs || 0, 30000), at: Date.now() };
+      save();
+      return m.audio;
+    }
+    // 兼容路径：调用方传 dataUrl（旧链路/迁移期）→ 异步转 Blob 再存，返回 Promise
+    return (async () => {
+      try {
+        const blob = await dataUrlToBlob(mediaRef);
+        const mid = await saveMediaBlob(blob);
+        m.audio = { mediaId: mid, durationMs: Math.min(durationMs || 0, 30000), at: Date.now() };
+        save();
+        return m.audio;
+      } catch (e) { return null; }
+    })();
   }
   function getMomentAudio(id) {
     const m = getMoment(id);
@@ -815,10 +928,52 @@ const TSD = (() => {
     for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) | 0;
     return (h >>> 0).toString(16).padStart(8, '0');
   }
-  const PKG_VERSION = 1;
+  const PKG_VERSION = 2; // v2：media 引用对象 {id,type,w,h}，包内带 base64 data 字段供跨设备还原
 
-  function makePackage() {
+  // 把单个 media 引用展开为可序列化包格式：{id,type,w,h,data(base64)} 或原样（旧 dataURL string）
+  async function mediaToPortable(media) {
+    if (!media) return null;
+    if (typeof media === 'string') return media; // 旧 dataURL 直接进包
+    if (!media.id) return null;
+    const blob = await getMediaBlob(media.id);
+    if (!blob) return { id: media.id, type: media.type, w: media.w, h: media.h, data: null };
+    const dataUrl = await blobToDataUrlHelper(blob);
+    return { id: media.id, type: media.type, w: media.w, h: media.h, data: dataUrl };
+  }
+  // 反向：包内 portable media → 存入本机 media store → 返回引用 {id,type,w,h}（id 重新生成本机 id）
+  async function portableToMedia(portable) {
+    if (!portable) return null;
+    if (typeof portable === 'string') return portable; // 旧 dataURL，留给 migrateMediaToBlob 处理
+    if (portable.data) {
+      try {
+        const blob = await dataUrlToBlob(portable.data);
+        const id = await saveMediaBlob(blob);
+        return { id, type: portable.type || blob.type, w: portable.w, h: portable.h };
+      } catch (_) { return { id: portable.id, type: portable.type, w: portable.w, h: portable.h }; }
+    }
+    return { id: portable.id, type: portable.type, w: portable.w, h: portable.h };
+  }
+  function blobToDataUrlHelper(blob) {
+    return new Promise((res, rej) => {
+      const r = new FileReader();
+      r.onloadend = () => res(r.result);
+      r.onerror = rej;
+      r.readAsDataURL(blob);
+    });
+  }
+
+  async function makePackage() {
     const data = JSON.parse(JSON.stringify(state));
+    // v2：把 media 引用展开为带 base64 的 portable 格式（跨设备可还原）
+    for (const m of data.moments) {
+      if (m.media) m.media = await mediaToPortable(m.media);
+      if (m.audio && m.audio.mediaId) {
+        m.audio = Object.assign({}, m.audio, { _portable: await mediaToPortable({ id: m.audio.mediaId, type: 'audio' }) });
+      }
+    }
+    if (data.grove && Array.isArray(data.grove.received)) {
+      for (const g of data.grove.received) if (g.media) g.media = await mediaToPortable(g.media);
+    }
     const body = JSON.stringify(data);
     return {
       schema: 'tsd-memory-package',
@@ -846,7 +1001,8 @@ const TSD = (() => {
     else {
       if (pkg.schema !== 'tsd-memory-package') errors.push('schema 不匹配（期望 tsd-memory-package）');
       if (typeof pkg.pkgVersion !== 'number') errors.push('缺少 pkgVersion');
-      if (pkg.pkgVersion !== PKG_VERSION) errors.push('包版本不匹配（期望 ' + PKG_VERSION + '，包内 ' + pkg.pkgVersion + '）');
+      // 兼容 v1（media 是 dataURL string）与 v2（media 是 portable 对象）
+      if (pkg.pkgVersion !== PKG_VERSION && pkg.pkgVersion !== 1) errors.push('包版本不匹配（期望 ' + PKG_VERSION + '，包内 ' + pkg.pkgVersion + '）');
       if (!pkg.data || typeof pkg.data !== 'object') errors.push('缺少 data 字段');
       else if (pkg.data.version !== VERSION) errors.push('数据版本不匹配（期望 ' + VERSION + '，包内 ' + pkg.data.version + '）');
     }
@@ -861,9 +1017,22 @@ const TSD = (() => {
       checksumExpected: pkg.checksum, checksumActual: calc,
     };
   }
-  // 校验通过后调用：替换状态
-  function applyImport(pkg) {
-    state = JSON.parse(JSON.stringify(pkg.data));
+  // 校验通过后调用：替换状态（v2 异步：portable media → 本机 media store）
+  async function applyImport(pkg) {
+    const data = JSON.parse(JSON.stringify(pkg.data));
+    // v2：portable media → 存本机 media store → 引用；v1 包 media 是 string，留给 migrateMediaToBlob
+    for (const m of data.moments) {
+      if (m.media) m.media = await portableToMedia(m.media);
+      if (m.audio && m.audio._portable) {
+        const ref = await portableToMedia(m.audio._portable);
+        if (ref && ref.id) m.audio.mediaId = ref.id;
+        delete m.audio._portable;
+      }
+    }
+    if (data.grove && Array.isArray(data.grove.received)) {
+      for (const g of data.grove.received) if (g.media) g.media = await portableToMedia(g.media);
+    }
+    state = data;
     save();
     return state;
   }
@@ -929,24 +1098,24 @@ const TSD = (() => {
     save();
   }
   // 导出一个瞬间为"信物"（给 ta 带回去）—— 返回可分享的紧凑数据
-  function exportGroveGift(momentId) {
+  async function exportGroveGift(momentId) {
     const m = getMoment(momentId);
     if (!m) return null;
     // 守原则7：只带原话+感受+大致时间，不带定位/人物原名（隐私最小化）
     return {
       type: 'tsd-grove-gift',
-      v: 1,
+      v: 2, // v2：media 带 base64 data 字段（跨设备可还原）
       quote: m.quote,
       kind: m.kind,
       // 模糊时间（参 Codex 模糊时间一等数据）：只保留大致时段
       whenText: m.when ? m.when.text : '某天',
       // 不带 audio（体积大、隐私）；feelingTag 不在信物协议（两端均未消费，避免误导）
-      media: m.media || null,
+      media: await mediaToPortable(m.media),
       fromAt: Date.now(),
     };
   }
   // 导入对方的"信物"到 grove
-  function importGroveGift(gift) {
+  async function importGroveGift(gift) {
     if (!gift || gift.type !== 'tsd-grove-gift') return null;
     const g = getGrove();
     const item = {
@@ -954,7 +1123,7 @@ const TSD = (() => {
       quote: gift.quote,
       kind: gift.kind || 'grass',
       whenText: gift.whenText || '某天',
-      media: gift.media || null,
+      media: await portableToMedia(gift.media),
       receivedAt: Date.now(),
       surfaced: false, // 是否已通过回声卡 surface 过（守节奏：一天一个）
       viewed: false,
@@ -1038,6 +1207,8 @@ const TSD = (() => {
     raw: () => state,
     getMoments, getMoment, addMoment, updateMoment, deleteMoment,
     setMomentAudio, getMomentAudio,
+    // v2 媒体 Blob API（app.js UI 用 resolveMediaUrl 替代直读 m.media）
+    saveMediaBlob, getMediaBlob, deleteMediaBlob, resolveMediaUrl, dataUrlToBlob,
     restoreDeletedMoment, hasMomentTombstone, clearMomentTombstone,
     searchMoments,
     getRevisits, getRevisitCount, addRevisit, thickness,

@@ -142,6 +142,16 @@ const App = (() => {
     return e;
   }
 
+  // v2 媒体 img：兼容旧 dataURL（string）与新 {id,type} 引用。先建占位 img，异步 resolveMediaUrl 填 src。
+  // 调用方像 el('img',{src:m.media,...}) 一样用，但 src 改传 mediaImg(media, {style,...})。
+  function mediaImg(media, attrs = {}) {
+    const img = el('img', attrs);
+    if (media) {
+      TSD.resolveMediaUrl(media).then(url => { if (url) img.src = url; });
+    }
+    return img;
+  }
+
   let toastTimer;
   function toast(msg) {
     let t = $('.toast:not(.toast--undo)');
@@ -508,7 +518,7 @@ const App = (() => {
         revCount > 0 ? ' · ' + t('echo.revisited_count', { n: revCount }) : ' · ' + t('today.first_brought_back'),
       ]),
       lastFeelingTag ? el('div', { class: 'echo-card__mood' }, [lastFeelingTag]) : null,
-      opts.media !== false && m.media ? el('img', { src: m.media, style: 'max-width:60%;border-radius:14px;margin:0 auto 20px;position:relative;' }) : null,
+      opts.media !== false && m.media ? mediaImg(m.media, { style: 'max-width:60%;border-radius:14px;margin:0 auto 20px;position:relative;' }) : null,
       // 语音回声（Stoic/Rosebud 式 · 情感密度最高）：有录音时 echo 卡显示"听这一刻的声音"
       // 守原则9：不自动播（不打扰），用户点才播；2s 片段守不延长会话
       m.audio ? el('div', { style: 'text-align:center;margin:0 auto 20px;' }, [
@@ -518,12 +528,16 @@ const App = (() => {
           onclick: (e) => {
             // 复用浏览器原生 audio，避免引入复杂播放器
             const a = document.createElement('audio');
-            a.src = m.audio.dataUrl;
-            a.currentTime = Math.max(0, (m.audio.durationMs - 2000) / 1000); // 末尾 2s
-            a.play().catch(() => {});
-            e.target.textContent = t('echo.listening');
-            a.addEventListener('ended', () => { e.target.textContent = t('echo.relisten'); });
-            a.addEventListener('pause', () => { e.target.textContent = t('echo.relisten'); });
+            // v2：audio.mediaId 引用 → resolveMediaUrl 取 blob URL；兼容旧 audio.dataUrl
+            TSD.resolveMediaUrl(m.audio.dataUrl ? m.audio.dataUrl : { id: m.audio.mediaId }).then(url => {
+              if (!url) return;
+              a.src = url;
+              a.currentTime = Math.max(0, (m.audio.durationMs - 2000) / 1000); // 末尾 2s
+              a.play().catch(() => {});
+              e.target.textContent = t('echo.listening');
+              a.addEventListener('ended', () => { e.target.textContent = t('echo.relisten'); });
+              a.addEventListener('pause', () => { e.target.textContent = t('echo.relisten'); });
+            });
           },
         }, [t('echo.listen_voice')]),
       ]) : null,
@@ -626,7 +640,7 @@ const App = (() => {
 
       // 瞬间本体（原话 + 媒体）
       el('div', { class: 'moment-card moment-card--thick' }, [
-        m.media ? el('div', { class: 'moment-card__media' }, [el('img', { src: m.media })]) : null,
+        m.media ? el('div', { class: 'moment-card__media' }, [mediaImg(m.media)]) : null,
         el('div', { class: 'moment-card__body' }, [
           el('div', { class: 'moment-card__quote serif' }, ['"' + m.quote + '"']),
           el('div', { class: 'moment-card__meta' }, [
@@ -779,7 +793,7 @@ const App = (() => {
         el('span', { class: 'chip ' + kindChipClass(m.kind) }, [kindLabel(m.kind)]),
       ]),
       el('div', { class: 'moment-card moment-card--thick' }, [
-        m.media ? el('div', { class: 'moment-card__media' }, [el('img', { src: m.media })]) : null,
+        m.media ? el('div', { class: 'moment-card__media' }, [mediaImg(m.media)]) : null,
         el('div', { class: 'moment-card__body' }, [
           el('div', { class: 'moment-card__quote serif' }, ['"' + m.quote + '"']),
           el('div', { class: 'moment-card__meta' }, [
@@ -870,8 +884,8 @@ const App = (() => {
       if (!f) return;
       toast(t('toast.processing_image'));
       try {
-        const { dataUrl } = await fileToCompressedDataUrl(f);
-        TSD.updateMoment(id, { media: dataUrl });
+        const media = await fileToCompressedDataUrl(f);
+        TSD.updateMoment(id, { media });
         toast(m.media ? t('moment.media_updated') : t('moment.media_added'));
         navigate('moment/' + id);
       } catch (err) { toast(err.message || t('moment.media_failed')); }
@@ -1035,7 +1049,7 @@ const App = (() => {
               style: 'position:relative;aspect-ratio:1;border-radius:10px;overflow:hidden;cursor:pointer;' + (c >= 2 ? 'box-shadow:0 0 0 2px var(--accent);' : ''),
               onclick: () => navigate('revisit/' + m.id),
             }, [
-              el('img', { src: m.media, style: 'width:100%;height:100%;object-fit:cover;' }),
+              mediaImg(m.media, { style: 'width:100%;height:100%;object-fit:cover;' }),
               c > 0 ? el('div', { class: 'thickness-badge', style: 'position:absolute;top:4px;right:6px;background:rgba(0,0,0,0.6);padding:2px 6px;border-radius:8px;color:#fff;' }, ['×' + (c + 1)]) : null,
             ]);
           })
@@ -1225,7 +1239,7 @@ const App = (() => {
       el('div', { class: 'card' }, [
         el('div', { class: 'setting-row' }, [el('div', { class: 'setting-row__main' }, [el('div', { class: 'setting-row__title' }, [t('settings.local-data')]), el('div', { class: 'setting-row__sub' }, [t('settings.local_stats', {m: TSD.getMoments().length, r: TSD.raw().revisits.length, p: TSD.getMoments().filter(m => m.media).length})])]), el('span', { class: 'badge badge--pass' }, [t('settings.local')])]),
         el('input', { type: 'file', accept: 'application/json,.json', id: 'set-import', style: 'display:none;' }),
-        el('div', { class: 'setting-row', onclick: () => { const pkg = TSD.makePackage(); downloadJSON(pkg, 'tsd-memory-package-' + Date.now() + '.json'); toast(t('toast.exported_pkg')); } }, [el('div', { class: 'setting-row__main' }, [el('div', { class: 'setting-row__title' }, [t('settings.export_pkg_title')]), el('div', { class: 'setting-row__sub' }, [t('settings.export_pkg_sub')])]), el('div', { class: 'list-row__right' }, ['⤓'])]),
+        el('div', { class: 'setting-row', onclick: async () => { const pkg = await TSD.makePackage(); downloadJSON(pkg, 'tsd-memory-package-' + Date.now() + '.json'); toast(t('toast.exported_pkg')); } }, [el('div', { class: 'setting-row__main' }, [el('div', { class: 'setting-row__title' }, [t('settings.export_pkg_title')]), el('div', { class: 'setting-row__sub' }, [t('settings.export_pkg_sub')])]), el('div', { class: 'list-row__right' }, ['⤓'])]),
         el('div', { class: 'setting-row', onclick: () => $('#set-import', view).click() }, [el('div', { class: 'setting-row__main' }, [el('div', { class: 'setting-row__title' }, [t('capsule.import-memory')]), el('div', { class: 'setting-row__sub' }, [t('capsule.validate-before-write')])]), el('div', { class: 'list-row__right' }, ['⤒'])]),
         el('div', { class: 'setting-row', onclick: () => openDeleteSheet(navigate) }, [el('div', { class: 'setting-row__main' }, [el('div', { class: 'setting-row__title' }, [t('settings.clear-local-data')]), el('div', { class: 'setting-row__sub' }, [t('settings.clear_data_sub')])]), el('div', { class: 'list-row__right' }, ['⊘'])]),
       ]),
@@ -1526,11 +1540,12 @@ const App = (() => {
       if (!f) return;
       toast(t('toast.processing_image'));
       try {
-        const { dataUrl } = await fileToCompressedDataUrl(f);
-        pendingMedia = dataUrl;
+        const media = await fileToCompressedDataUrl(f);
+        pendingMedia = media;
         const box = $('#cap-photo-preview', view);
         box.innerHTML = '';
-        box.appendChild(el('img', { src: dataUrl, style: 'max-width:100%;max-height:220px;border-radius:12px;' }));
+        const previewUrl = await TSD.resolveMediaUrl(media);
+        box.appendChild(el('img', { src: previewUrl, style: 'max-width:100%;max-height:220px;border-radius:12px;' }));
         toast(t('toast.image_selected'));
       } catch (err) { toast(err.message || t('moment.media_failed')); }
     });
@@ -1673,12 +1688,12 @@ const App = (() => {
         el('div', { class: 'divider', style: 'margin:16px 0;' }),
         el('div', { class: 'muted', style: 'font-size:12px;margin-bottom:8px;' }, [t('grove.receive-gift-prompt')]),
         el('textarea', { id: 'grove-import', placeholder: t('grove.import_placeholder'), style: 'width:100%;min-height:60px;padding:10px;background:var(--bg-elev);border:1px solid var(--line-strong);border-radius:10px;font-size:12px;resize:none;' }),
-        el('button', { class: 'btn btn--ghost btn--sm btn--block mt-2', onclick: () => {
+        el('button', { class: 'btn btn--ghost btn--sm btn--block mt-2', onclick: async () => {
           const txt = (($('#grove-import', view) || {}).value || '').trim();
           if (!txt) { toast(t('toast.paste_gift')); return; }
           try {
             const gift = JSON.parse(txt);
-            const item = TSD.importGroveGift(gift);
+            const item = await TSD.importGroveGift(gift);
             if (item) { haptic('success'); toast(t('toast.grove_received')); navigate('grove'); }
             else toast(t('toast.gift_invalid'));
           } catch (e) { toast(t('toast.gift_invalid')); }
@@ -1698,7 +1713,7 @@ const App = (() => {
         const echo = TSD.groveEcho();
         return echo ? el('div', { class: 'card mb-3', style: 'border:1px solid var(--accent-glow, rgba(240,178,136,.3));' }, [
           el('div', { class: 'echo-card__label' }, [t('grove.today_echo_from', {name: g.partnerName})]),
-          echo.media ? el('img', { src: echo.media, style: 'max-width:100%;border-radius:12px;margin:10px 0;' }) : null,
+          echo.media ? mediaImg(echo.media, { style: 'max-width:100%;border-radius:12px;margin:10px 0;' }) : null,
           el('div', { class: 'serif', style: 'font-size:17px;line-height:1.5;margin:10px 0;color:var(--fg);' }, ['"' + echo.quote + '"']),
           el('div', { class: 'muted', style: 'font-size:11px;' }, [echo.whenText + ' · ' + fmtRelative(echo.receivedAt) + t('grove.received_at')]),
           el('button', { class: 'btn btn--ghost btn--sm mt-3', onclick: () => { TSD.markGroveViewed(echo.id); toast(t('toast.viewed')); } }, [t('grove.i_see')]),
@@ -1825,7 +1840,7 @@ const App = (() => {
         ctx.fillStyle = 'rgba(240,178,136,0.5)'; ctx.font = '12px sans-serif';
         ctx.fillText((i + 1) + ' / ' + moments.length, 270, 28);
       };
-      img.src = m.media;
+      TSD.resolveMediaUrl(m.media).then(url => { if (url) img.src = url; });
     };
 
     const play = () => {
@@ -2029,9 +2044,9 @@ const App = (() => {
 
   // Shared Grove 信物导出 sheet（把这个瞬间打包成可分享的紧凑数据给 ta）
   // 守原则7：1:1 二元；守隐私最小化：不带定位/人物原名
-  function openGroveGiftSheet(m) {
+  async function openGroveGiftSheet(m) {
     const g = TSD.getGrove();
-    const gift = TSD.exportGroveGift(m.id);
+    const gift = await TSD.exportGroveGift(m.id);
     const giftText = gift ? JSON.stringify(gift) : '';
     const content = el('div', {}, [
       el('h3', { class: 'h3 mb-3' }, [t('grove.grove-for-them')]),
@@ -2286,8 +2301,10 @@ const App = (() => {
           el('button', { class: 'btn btn--ghost btn--lg', style: 'flex:1', onclick: () => { resetRec(); render('idle'); } }, [t('voice.re-record')]),
           el('button', { class: 'btn btn--primary btn--lg', style: 'flex:1', onclick: async () => {
             try {
-              const dataUrl = await blobToDataUrl(audioUrl);
-              TSD.setMomentAudio(momentId, dataUrl, durationMs);
+              // v2：录音 Blob 直存 media store，moment.audio 留 mediaId 引用（不经 base64）
+              const blob = await fetch(audioUrl).then(r => r.blob());
+              const mediaId = await TSD.saveMediaBlob(blob);
+              TSD.setMomentAudio(momentId, mediaId, durationMs);
               haptic('success');
               toast(t('toast.voice_saved'));
             } catch (e) { toast(t('toast.storage_failed')); }
@@ -2970,6 +2987,8 @@ const App = (() => {
   }
 
   // 影像 → 压缩 dataURL（避免 LocalStorage 撑爆；原图 4MB 经此变 ~200KB）
+  // v2：压缩后产 Blob → 存 media store → 返回 {id,type,w,h} 引用（moment.media 不再内联 dataURL）。
+  // 保留函数名 fileToCompressedDataUrl 以减小调用点改动；返回值从 {dataUrl} 改为 {id,type,w,h}。
   function fileToCompressedDataUrl(file, opts = {}) {
     const maxDim = opts.maxDim || 1024;
     const quality = opts.quality || 0.82;
@@ -2978,14 +2997,20 @@ const App = (() => {
       const fr = new FileReader();
       fr.onload = () => {
         const img = new Image();
-        img.onload = () => {
+        img.onload = async () => {
           let w = img.width, h = img.height;
           if (w > h && w > maxDim) { h = Math.round(h * maxDim / w); w = maxDim; }
           else if (h > maxDim) { w = Math.round(w * maxDim / h); h = maxDim; }
           const c = document.createElement('canvas');
           c.width = w; c.height = h;
           c.getContext('2d').drawImage(img, 0, 0, w, h);
-          resolve({ dataUrl: c.toDataURL('image/jpeg', quality), w, h });
+          c.toBlob(async (blob) => {
+            if (!blob) { reject(new Error(t('file.err_decode'))); return; }
+            try {
+              const id = await TSD.saveMediaBlob(blob);
+              resolve({ id, type: blob.type || 'image/jpeg', w, h });
+            } catch (e) { reject(e); }
+          }, 'image/jpeg', quality);
         };
         img.onerror = () => reject(new Error(t('file.err_decode')));
         img.src = fr.result;
@@ -3017,7 +3042,7 @@ const App = (() => {
         ]) : null,
       ]),
       r.ok
-        ? el('button', { class: 'btn btn--primary btn--block mt-3', onclick: () => { TSD.applyImport(pkg); toast(t('toast.imported_overwrite')); navigate('today', { replace: true }); } }, [t('import.confirm_btn')])
+        ? el('button', { class: 'btn btn--primary btn--block mt-3', onclick: async () => { await TSD.applyImport(pkg); toast(t('toast.imported_overwrite')); navigate('today', { replace: true }); } }, [t('import.confirm_btn')])
         : el('p', { class: 'muted text-center', style: 'font-size:12px;' }, [t('capsule.validation-failed')]),
     ]);
     sheet(content);
