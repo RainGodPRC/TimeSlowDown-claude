@@ -285,7 +285,7 @@ const App = (() => {
             // 留存漏斗修复：用户同意通知后即调度，不依赖当天完成回访
             if (typeof PushHook !== 'undefined' && PushHook.isNative()) {
               PushHook.scheduleTomorrowEcho().then(ok => {
-                if (ok) toast('已为你安排明天的回声提醒');
+                if (ok) toast(t('toast.scheduled_tomorrow'));
               });
             }
             finish();
@@ -619,9 +619,9 @@ const App = (() => {
     let finished = false;
 
     view.appendChild(el('div', {}, [
-      el('div', { class: 'section-title' }, ['回访中 · 限时 10 秒']),
+      el('div', { class: 'section-title' }, [t('revisit.title')]),
       el('p', { class: 'muted', style: 'font-size:12px;margin-bottom:16px;' }, [
-        '不沉溺。被带回 10 秒，就回到今天。',
+        t('revisit.intro'),
       ]),
 
       // 瞬间本体（原话 + 媒体）
@@ -631,12 +631,12 @@ const App = (() => {
           el('div', { class: 'moment-card__quote serif' }, ['"' + m.quote + '"']),
           el('div', { class: 'moment-card__meta' }, [
             el('span', {}, [fmtWhen(m.when)]),
-            el('span', {}, [m.people && m.people.length ? m.people.join('、') : '独自']),
+            el('span', {}, [m.people && m.people.length ? m.people.join('、') : t('revisit.alone')]),
           ]),
           // 已有层叠
           revs.length ? el('div', { class: 'moment-card__layers' }, revs.map(r =>
             el('div', { class: 'moment-card__layer' }, [
-              el('div', { class: 'moment-card__layer-time' }, [fmtDate(r.at) + ' · 回访' + (r.feelingTag ? ' · ' + r.feelingTag : '')]),
+              el('div', { class: 'moment-card__layer-time' }, [fmtDate(r.at) + ' · ' + t('revisit.layer_label') + (r.feelingTag ? ' · ' + r.feelingTag : '')]),
               el('div', {}, [r.feeling || t('revisit.only_stayed')]),
             ])
           )) : null,
@@ -732,7 +732,7 @@ const App = (() => {
         // 显示语音捕获入口（Stoic/Rosebud 式 · 情感密度最高）
         const vw = $('#voice-wrap', view);
         if (vw) vw.style.display = '';
-        toast('可以补一句了，也可以不补');
+        toast(t('toast.can_add'));
       }
     }, 1000));
 
@@ -868,7 +868,7 @@ const App = (() => {
     $('#moment-photo', view).addEventListener('change', async (e) => {
       const f = e.target.files[0];
       if (!f) return;
-      toast('处理影像…');
+      toast(t('toast.processing_image'));
       try {
         const { dataUrl } = await fileToCompressedDataUrl(f);
         TSD.updateMoment(id, { media: dataUrl });
@@ -1227,13 +1227,13 @@ const App = (() => {
       el('div', { class: 'card' }, [
         el('div', { class: 'setting-row' }, [el('div', { class: 'setting-row__main' }, [el('div', { class: 'setting-row__title' }, ['本地数据']), el('div', { class: 'setting-row__sub' }, [TSD.getMoments().length + ' 个瞬间 · ' + TSD.raw().revisits.length + ' 次回访 · ' + TSD.getMoments().filter(m => m.media).length + ' 张影像'])]), el('span', { class: 'badge badge--pass' }, ['本地'])]),
         el('input', { type: 'file', accept: 'application/json,.json', id: 'set-import', style: 'display:none;' }),
-        el('div', { class: 'setting-row', onclick: () => { const pkg = TSD.makePackage(); downloadJSON(pkg, 'tsd-memory-package-' + Date.now() + '.json'); toast('已导出记忆包（含校验和）'); } }, [el('div', { class: 'setting-row__main' }, [el('div', { class: 'setting-row__title' }, ['导出记忆包']), el('div', { class: 'setting-row__sub' }, ['版本化 JSON + 完整性 checksum，可带走/回灌'])]), el('div', { class: 'list-row__right' }, ['⤓'])]),
+        el('div', { class: 'setting-row', onclick: () => { const pkg = TSD.makePackage(); downloadJSON(pkg, 'tsd-memory-package-' + Date.now() + '.json'); toast(t('toast.exported_pkg')); } }, [el('div', { class: 'setting-row__main' }, [el('div', { class: 'setting-row__title' }, ['导出记忆包']), el('div', { class: 'setting-row__sub' }, ['版本化 JSON + 完整性 checksum，可带走/回灌'])]), el('div', { class: 'list-row__right' }, ['⤓'])]),
         el('div', { class: 'setting-row', onclick: () => $('#set-import', view).click() }, [el('div', { class: 'setting-row__main' }, [el('div', { class: 'setting-row__title' }, ['导入记忆包（校验）']), el('div', { class: 'setting-row__sub' }, ['先校验 schema 与 checksum，再决定写入'])]), el('div', { class: 'list-row__right' }, ['⤒'])]),
         el('div', { class: 'setting-row', onclick: () => openDeleteSheet(navigate) }, [el('div', { class: 'setting-row__main' }, [el('div', { class: 'setting-row__title' }, ['清空本地数据']), el('div', { class: 'setting-row__sub' }, ['生成回执 · 会话内可撤销'])]), el('div', { class: 'list-row__right' }, ['⊘'])]),
       ]),
       TSD.hasTombstone() ? el('div', { class: 'card mt-3', style: 'border:1px solid var(--bloom);' }, [
         el('div', { class: 'setting-row' }, [el('div', { class: 'setting-row__main' }, [el('div', { class: 'setting-row__title' }, ['可撤销刚才的删除']), el('div', { class: 'setting-row__sub' }, ['墓碑仍保留，一键恢复删除前数据'])]), el('span', { class: 'badge badge--poc' }, ['可撤销'])]),
-        el('button', { class: 'btn btn--primary btn--block mt-2', onclick: () => { if (TSD.restoreTombstone()) { toast('已恢复删除前的数据'); navigate('today', { replace: true }); } else toast('恢复失败'); } }, ['撤销删除']),
+        el('button', { class: 'btn btn--primary btn--block mt-2', onclick: () => { if (TSD.restoreTombstone()) { toast(t('toast.restored')); navigate('today', { replace: true }); } else toast(t('toast.restore_failed')); } }, ['撤销删除']),
       ]) : null,
 
       el('div', { class: 'section-title' }, [t('settings.appearance')]),
@@ -1267,13 +1267,13 @@ const App = (() => {
         // 错误日志导出（参 ZCode · TestFlight 真机调试必备）：把运行时错误栈导出为 JSON 下载
         el('div', { class: 'setting-row', onclick: () => {
           const logs = window.__tsdExportErrorLog ? window.__tsdExportErrorLog() : [];
-          if (!logs.length) { toast('暂无错误日志'); return; }
+          if (!logs.length) { toast(t('toast.no_error_log')); return; }
           const blob = new Blob([JSON.stringify(logs, null, 2)], { type: 'application/json' });
           const url = URL.createObjectURL(blob);
           const a = el('a', { href: url, download: 'tsd-error-log-' + Date.now() + '.json' });
           document.body.appendChild(a); a.click(); a.remove();
           URL.revokeObjectURL(url);
-          toast('已导出 ' + logs.length + ' 条错误日志');
+          toast(t('toast.exported_logs', {n: logs.length}));
         } }, [el('div', { class: 'setting-row__main' }, [el('div', { class: 'setting-row__title' }, ['导出错误日志']), el('div', { class: 'setting-row__sub' }, ['运行时错误栈 · TestFlight 反馈用 · ' + (window.__tsdExportErrorLog ? window.__tsdExportErrorLog().length : 0) + ' 条'])]), el('div', { class: 'list-row__right' }, ['▸'])]),
       ]),
 
@@ -1310,7 +1310,7 @@ const App = (() => {
       try {
         const pkg = JSON.parse(await f.text());
         openImportSheet(pkg, navigate);
-      } catch (err) { toast('读取 JSON 失败'); }
+      } catch (err) { toast(t('toast.read_json_failed')); }
       e.target.value = '';
     });
   });
@@ -1401,7 +1401,7 @@ const App = (() => {
           + '时间: ' + new Date().toLocaleString('zh-CN') + '\n'
           + 'PASS: ' + pass + ' / POC: ' + poc + ' / TODO: ' + todo + '\n\n'
           + checks.map(c => '[' + c[2] + '] ' + c[0]).join('\n');
-        navigator.clipboard.writeText(report).then(() => toast('QA 报告已复制'));
+        navigator.clipboard.writeText(report).then(() => toast(t('toast.qa_copied')));
       } }, ['复制 QA 报告']),
     ]));
   });
@@ -1511,14 +1511,14 @@ const App = (() => {
         el('button', { class: 'btn btn--ghost btn--lg', style: 'flex:1', onclick: () => navigate('today') }, ['取消']),
         el('button', { class: 'btn btn--primary btn--lg', style: 'flex:1', onclick: () => {
           const q = $('#cap-quote').value.trim();
-          if (!q) { toast('写一句吧'); return; }
+          if (!q) { toast(t('toast.write_a_line')); return; }
           const kindEl = $$('#cap-kind .chip').find(c => c.className.includes('chip--'));
           const kind = kindEl ? kindEl.getAttribute('data-k') : 'grass';
           const people = $('#cap-people').value.split(',').map(s => s.trim()).filter(Boolean);
           const place = $('#cap-place').value.trim() || null;
           TSD.addMoment({ quote: q, kind, people, place, media: pendingMedia, when: { precision: 'day', text: '今天', start: Math.floor(Date.now()/1000) } });
           TSD.logAiTask({ type: 'T0', payload: { action: 'extract', quote: q, hasMedia: !!pendingMedia }, result: '本地结构抽取，未上传', localOnly: true });
-          toast('已留住。它会在某天被带回给你。');
+          toast(t('toast.kept_moment'));
           navigate('today');
         } }, ['留住']),
       ]),
@@ -1526,14 +1526,14 @@ const App = (() => {
     $('#cap-photo', view).addEventListener('change', async (e) => {
       const f = e.target.files[0];
       if (!f) return;
-      toast('处理影像…');
+      toast(t('toast.processing_image'));
       try {
         const { dataUrl } = await fileToCompressedDataUrl(f);
         pendingMedia = dataUrl;
         const box = $('#cap-photo-preview', view);
         box.innerHTML = '';
         box.appendChild(el('img', { src: dataUrl, style: 'max-width:100%;max-height:220px;border-radius:12px;' }));
-        toast('已选影像（已压缩为本地存储）');
+        toast(t('toast.image_selected'));
       } catch (err) { toast(err.message || '影像处理失败'); }
     });
   });
@@ -1595,7 +1595,7 @@ const App = (() => {
           const unlockAt = Date.now() + days * 864e5;
           TSD.addCapsule({ quote: m.quote, momentId: m.id, unlockAt });
           haptic('success');
-          toast('已封存 · ' + new Date(unlockAt).toLocaleDateString('zh-CN') + ' 解锁');
+          toast(t('toast.sealed_capsule', {date: new Date(unlockAt).toLocaleDateString(I18N.getLocale()==='zh'?'zh-CN':'en')}));
           const s = e.target.closest('.sheet'); if (s && s._close) s._close();
         } }, [label])
       )),
@@ -1666,9 +1666,9 @@ const App = (() => {
         el('input', { id: 'grove-name', placeholder: '给 ta 起个名字（比如：老朋友）', style: 'width:100%;padding:12px;background:var(--bg-elev);border:1px solid var(--line-strong);border-radius:10px;margin-bottom:12px;' }),
         el('button', { class: 'btn btn--primary btn--block', onclick: () => {
           const n = ($('#grove-name', view) || {}).value;
-          if (!n || !n.trim()) { toast('起个名字吧'); return; }
+          if (!n || !n.trim()) { toast(t('toast.name_required')); return; }
           TSD.setGrovePartner(n);
-          toast('林子已建好。把你的瞬间发给 ' + n.trim());
+          toast(t('toast.grove_created', {name: n.trim()}));
           navigate('grove');
         } }, ['建立林子']),
         // 导入对方的信物
@@ -1677,13 +1677,13 @@ const App = (() => {
         el('textarea', { id: 'grove-import', placeholder: '把 ta 分享给你的信物文本粘在这里…', style: 'width:100%;min-height:60px;padding:10px;background:var(--bg-elev);border:1px solid var(--line-strong);border-radius:10px;font-size:12px;resize:none;' }),
         el('button', { class: 'btn btn--ghost btn--sm btn--block mt-2', onclick: () => {
           const txt = (($('#grove-import', view) || {}).value || '').trim();
-          if (!txt) { toast('先粘贴信物'); return; }
+          if (!txt) { toast(t('toast.paste_gift')); return; }
           try {
             const gift = JSON.parse(txt);
             const item = TSD.importGroveGift(gift);
-            if (item) { haptic('success'); toast('ta 的瞬间已收到——明天它会以回声浮出'); navigate('grove'); }
-            else toast('信物格式不对');
-          } catch (e) { toast('信物格式不对'); }
+            if (item) { haptic('success'); toast(t('toast.grove_received')); navigate('grove'); }
+            else toast(t('toast.gift_invalid'));
+          } catch (e) { toast(t('toast.gift_invalid')); }
         } }, ['导入 ta 的信物']),
       ]) : el('div', { class: 'card mb-3' }, [
         el('div', { class: 'flex items-center justify-between' }, [
@@ -1703,7 +1703,7 @@ const App = (() => {
           echo.media ? el('img', { src: echo.media, style: 'max-width:100%;border-radius:12px;margin:10px 0;' }) : null,
           el('div', { class: 'serif', style: 'font-size:17px;line-height:1.5;margin:10px 0;color:var(--fg);' }, ['"' + echo.quote + '"']),
           el('div', { class: 'muted', style: 'font-size:11px;' }, [echo.whenText + ' · ' + fmtRelative(echo.receivedAt) + '收到']),
-          el('button', { class: 'btn btn--ghost btn--sm mt-3', onclick: () => { TSD.markGroveViewed(echo.id); toast('已看过'); } }, ['我看见了']),
+          el('button', { class: 'btn btn--ghost btn--sm mt-3', onclick: () => { TSD.markGroveViewed(echo.id); toast(t('toast.viewed')); } }, ['我看见了']),
         ]) : null;
       })() : null,
 
@@ -1852,7 +1852,7 @@ const App = (() => {
             const file = new File([blob], 'tsd-mash-' + Date.now() + '.png', { type: 'image/png' });
             if (navigator.canShare && navigator.canShare({ files: [file] })) {
               await navigator.share({ files: [file], title: '人生蒙太奇', text: '我的回访过的人生 · TimeSlowDown' });
-            } else { toast('已生成（当前环境不支持系统分享，可长按保存）'); }
+            } else { toast(t('toast.generated_no_share')); }
           } catch (e) {}
         } }, ['分享这一帧']),
       ]),
@@ -1898,7 +1898,7 @@ const App = (() => {
         const file = new File([blob], 'tsd-invite-' + Date.now() + '.png', { type: 'image/png' });
         haptic('success');
         if (navigator.canShare && navigator.canShare({ files: [file] })) { try { await navigator.share({ files: [file], title: '一封来自朋友的信', text: t }); return; } catch (e) {} }
-        const a = el('a', { href: URL.createObjectURL(blob), download: file.name }); document.body.appendChild(a); a.click(); a.remove(); toast('邀请卡已保存');
+        const a = el('a', { href: URL.createObjectURL(blob), download: file.name }); document.body.appendChild(a); a.click(); a.remove(); toast(t('toast.invite_saved'));
       } }, ['生成邀请卡 · 分享']),
       el('p', { class: 'muted mt-4', style: 'font-size:11px;text-align:center;' }, ['零奖励式推荐——条件性奖励侵蚀内驱动（Deci/Koestner/Ryan）；BetterHelp 因推荐奖励被 FTC 罚 780 万。']),
     ]));
@@ -1948,7 +1948,7 @@ const App = (() => {
       catch (e) { /* 取消 */ }
     }
     const a = el('a', { href: URL.createObjectURL(blob), download: file.name }); document.body.appendChild(a); a.click(); a.remove();
-    toast('重逢卡已保存为图片');
+    toast(t('toast.reunion_saved'));
   }
   // 重逢报告 stat 卡（C-D）：大数字/词 + label，居中，可分享 PNG
   function renderStatCard(headline, label) {
@@ -1969,7 +1969,7 @@ const App = (() => {
     const blob = await new Promise(res => c.toBlob(res, 'image/png'));
     const file = new File([blob], 'tsd-report-' + Date.now() + '.png', { type: 'image/png' });
     if (navigator.canShare && navigator.canShare({ files: [file] })) { try { await navigator.share({ files: [file], title: 'TimeSlowDown · 重逢报告' }); return; } catch (e) {} }
-    const a = el('a', { href: URL.createObjectURL(blob), download: file.name }); document.body.appendChild(a); a.click(); a.remove(); toast('已保存报告卡');
+    const a = el('a', { href: URL.createObjectURL(blob), download: file.name }); document.body.appendChild(a); a.click(); a.remove(); toast(t('toast.report_saved'));
   }
   // 讲给一个人：信物卡（C-B · 二元具名，雾蓝→陶土亲密美学，区别于重逢卡的旷野深色）
   function renderGiftCard(m, recipient) {
@@ -2008,7 +2008,7 @@ const App = (() => {
         const file = new File([blob], 'tsd-gift-' + Date.now() + '.png', { type: 'image/png' });
         haptic('success');
         if (navigator.canShare && navigator.canShare({ files: [file] })) { try { await navigator.share({ files: [file], title: '给你的一个瞬间', text: '我把这个瞬间留给你，不是发到网上。' }); return; } catch (e) {} }
-        const a = el('a', { href: URL.createObjectURL(blob), download: file.name }); document.body.appendChild(a); a.click(); a.remove(); toast('信物卡已保存，私发给 ta');
+        const a = el('a', { href: URL.createObjectURL(blob), download: file.name }); document.body.appendChild(a); a.click(); a.remove(); toast(t('toast.gift_saved'));
       } }, ['生成信物卡 · 私发给 ta']),
       el('p', { class: 'muted mt-3', style: 'font-size:11px;text-align:center;' }, ['默认无人脸/无定位。窄播比广播更利他、更可能被珍藏（Barasch & Berger）。']),
     ]);
@@ -2047,12 +2047,12 @@ const App = (() => {
         el('textarea', { readonly: '', style: 'width:100%;min-height:80px;padding:10px;background:var(--bg-elev);border:1px solid var(--line-strong);border-radius:10px;font-size:10px;resize:none;font-family:var(--font-mono);color:var(--fg-mute);' }, [giftText]),
         el('div', { class: 'flex gap-3 mt-3' }, [
           el('button', { class: 'btn btn--primary btn--lg', style: 'flex:1', onclick: async () => {
-            try { await navigator.clipboard.writeText(giftText); toast('信物已复制——发给 ' + g.partnerName); }
-            catch (e) { toast('复制失败，请手动选择文本'); }
+            try { await navigator.clipboard.writeText(giftText); toast(t('toast.gift_copied', {name: g.partnerName})); }
+            catch (e) { toast(t('toast.copy_failed')); }
           } }, ['复制信物']),
           el('button', { class: 'btn btn--ghost btn--lg', style: 'flex:1', onclick: async () => {
             if (navigator.share) { try { await navigator.share({ title: '来自 TSD 的信物', text: giftText }); } catch (e) {} }
-            else { try { await navigator.clipboard.writeText(giftText); toast('已复制（当前环境不支持系统分享）'); } catch (e) {} }
+            else { try { await navigator.clipboard.writeText(giftText); toast(t('toast.copied_no_share')); } catch (e) {} }
           } }, ['系统分享']),
         ]),
       ]) : el('button', { class: 'btn btn--primary btn--block', onclick: () => { sheet_close(); location.hash = 'grove'; } }, ['去建立林子']),
@@ -2069,13 +2069,13 @@ const App = (() => {
       cardSlot,
       el('div', { class: 'section-title' }, ['隐私层级']),
       el('div', { class: 'card' }, [
-        el('div', { class: 'setting-row', onclick: () => toast('私密版保留原话，仅发给指定的人') }, [el('div', { class: 'setting-row__main' }, [el('div', { class: 'setting-row__title' }, ['讲给一个人']), el('div', { class: 'setting-row__sub' }, ['保留原话，接收者无需注册'])]), el('span', { class: 'chip chip--accent' }, ['私密'])]),
-        el('div', { class: 'setting-row', onclick: () => toast('公开版已隐藏人名/地点/原文') }, [el('div', { class: 'setting-row__main' }, [el('div', { class: 'setting-row__title' }, ['分享一幅风景']), el('div', { class: 'setting-row__sub' }, ['隐藏人名、地点、原文，只留抽象'])]), el('span', { class: 'chip' }, ['公开'])]),
+        el('div', { class: 'setting-row', onclick: () => toast(t('toast.private_note')) }, [el('div', { class: 'setting-row__main' }, [el('div', { class: 'setting-row__title' }, ['讲给一个人']), el('div', { class: 'setting-row__sub' }, ['保留原话，接收者无需注册'])]), el('span', { class: 'chip chip--accent' }, ['私密'])]),
+        el('div', { class: 'setting-row', onclick: () => toast(t('toast.public_hidden')) }, [el('div', { class: 'setting-row__main' }, [el('div', { class: 'setting-row__title' }, ['分享一幅风景']), el('div', { class: 'setting-row__sub' }, ['隐藏人名、地点、原文，只留抽象'])]), el('span', { class: 'chip' }, ['公开'])]),
       ]),
       el('button', { class: 'btn btn--primary btn--block mt-4', onclick: () => shareRevisitCard(m, revs) }, ['生成重逢卡 · 分享 / 保存图片']),
       el('button', { class: 'btn btn--ghost btn--block mt-3', onclick: () => {
         const text = '"' + m.quote + '"\n— 回访 ' + revs.length + ' 次\nTimeSlowDown';
-        navigator.clipboard.writeText(text).then(() => toast('已复制文案'));
+        navigator.clipboard.writeText(text).then(() => toast(t('toast.text_copied')));
       } }, ['仅复制文案']),
       el('p', { class: 'muted mt-3', style: 'font-size:11px;text-align:center;' }, ['分享的是一张成品图，不是公开 Feed。你拥有什么被看见。']),
     ]);
@@ -2111,7 +2111,7 @@ const App = (() => {
         el('button', { class: 'btn btn--ghost btn--lg', style: 'flex:1', onclick: () => { const s = document.querySelector('.sheet'); if (s && s._close) s._close(); } }, ['取消']),
         el('button', { class: 'btn btn--primary btn--lg', style: 'flex:1', onclick: () => {
           const quote = $('#edit-quote').value.trim();
-          if (!quote) { toast('原话不能为空'); return; }
+          if (!quote) { toast(t('toast.quote_empty')); return; }
           const people = $('#edit-people').value.split(',').map(s => s.trim()).filter(Boolean);
           const place = $('#edit-place').value.trim() || null;
           const whenText = $('#edit-when').value.trim();
@@ -2123,7 +2123,7 @@ const App = (() => {
           // 记录 AI 任务账本（T0 结构抽取：用户手工修订视为本地结构更新）
           TSD.logAiTask({ type: 'T0', payload: { action: 'user_edit', momentId: m.id }, result: '用户亲自修订，未上传', localOnly: true });
           haptic('success');
-          toast('已更新这一刻');
+          toast(t('toast.moment_updated'));
           const s = document.querySelector('.sheet'); if (s && s._close) s._close();
           navigate('moment/' + m.id);
         } }, ['保存']),
@@ -2151,8 +2151,8 @@ const App = (() => {
           const t = el('div', { class: 'toast toast--undo is-show', role: 'status', 'aria-live': 'polite' }, [
             el('span', {}, ['已删除这一刻']),
             el('button', { class: 'btn btn--sm', style: 'color:var(--accent);background:transparent;border:none;font-size:13px;font-weight:600;', onclick: () => {
-              if (TSD.restoreDeletedMoment()) { toast('已恢复'); navigate('moment/' + m.id); }
-              else toast('恢复失败'); t.remove();
+              if (TSD.restoreDeletedMoment()) { toast(t('toast.restored_moment')); navigate('moment/' + m.id); }
+              else toast(t('toast.restore_failed')); t.remove();
             } }, ['撤销']),
           ]);
           document.body.appendChild(t);
@@ -2211,7 +2211,7 @@ const App = (() => {
         ev.prompt();
         try { await ev.userChoice; } catch (e) {}
         window.__tsdInstallPrompt = null;
-        toast('已添加到主屏幕');
+        toast(t('toast.added_to_home'));
       } }, ['安装到主屏幕']) : null,
       // iOS 手动引导
       isIOS ? el('div', { class: 'card mb-3' }, [
@@ -2285,8 +2285,8 @@ const App = (() => {
               const dataUrl = await blobToDataUrl(audioUrl);
               TSD.setMomentAudio(momentId, dataUrl, durationMs);
               haptic('success');
-              toast('已留住这一刻的声音');
-            } catch (e) { toast('存储失败'); }
+              toast(t('toast.voice_saved'));
+            } catch (e) { toast(t('toast.storage_failed')); }
             closeRitual(overlay);
           } }, ['留住']),
         ]));
@@ -2321,7 +2321,7 @@ const App = (() => {
           if (left <= 0) { clearRouteTimer(); stopRec(); }
         }, 1000));
       } catch (e) {
-        toast('无法访问麦克风');
+        toast(t('toast.mic_denied'));
         closeRitual(overlay);
       }
     };
@@ -2748,7 +2748,7 @@ const App = (() => {
             el('button', { class: 'btn btn--ghost btn--lg', style: 'flex:1', onclick: () => closeRitual(overlay) }, ['算了']),
             el('button', { class: 'btn btn--primary btn--lg', style: 'flex:1', onclick: () => {
               const q = ($('#ask-input', content) || {}).value;
-              if (!q || !q.trim()) { toast('写一句问的吧'); return; }
+              if (!q || !q.trim()) { toast(t('toast.ask_empty')); return; }
               const ans = TSD.askPastSelf(m.id, q);
               haptic('impact');
               render(ans);
@@ -2952,7 +2952,7 @@ const App = (() => {
         ]) : null,
       ]),
       r.ok
-        ? el('button', { class: 'btn btn--primary btn--block mt-3', onclick: () => { TSD.applyImport(pkg); toast('已导入（覆盖本地）'); navigate('today', { replace: true }); } }, ['确认导入（覆盖本地）'])
+        ? el('button', { class: 'btn btn--primary btn--block mt-3', onclick: () => { TSD.applyImport(pkg); toast(t('toast.imported_overwrite')); navigate('today', { replace: true }); } }, ['确认导入（覆盖本地）'])
         : el('p', { class: 'muted text-center', style: 'font-size:12px;' }, ['校验未通过，已拒绝导入以免损坏数据。']),
     ]);
     sheet(content);
@@ -2995,7 +2995,7 @@ const App = (() => {
         note: '本地删除回执 · 非密码学 · 不构成外部凭证',
       }, 'tsd-deletion-receipt-' + receipt.savedAt + '.json');
       if (s._close) s._close();
-      toast('已删除 · 回执已下载 · 设置内可撤销');
+      toast(t('toast.deleted_receipt'));
       navigate('settings');
     });
   }
@@ -3021,7 +3021,7 @@ const App = (() => {
     // IDB 写入失败警示（配额超限/损坏）：首次失败 toast 一次，提示用户导出备份。
     // 守"数据不丢"铁律：绝不静默吞掉持久化失败让用户以为已保存。
     TSD.onSaveError(() => {
-      toast('存储写入失败，请导出备份');
+      toast(t('toast.save_failed_export'));
     });
     applyTheme(TSD.raw().settings && TSD.raw().settings.darkMode || 'auto');
     TSD.checkAchievements(); // 启动静默解锁已达成成就（不在启动时 toast，避免噪音）

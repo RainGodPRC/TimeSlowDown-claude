@@ -1,5 +1,5 @@
 // TSD Claude Code 分支 Service Worker
-const CACHE = 'tsd-cc-v39';
+const CACHE = 'tsd-cc-v40';
 const ASSETS = ['./', './index.html', './styles.css?v=34', './app.js?v=34', './data.js?v=34', './push.js?v=34', './widget.js?v=34', './manifest.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {
