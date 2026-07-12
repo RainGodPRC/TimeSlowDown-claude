@@ -70,8 +70,8 @@ const App = (() => {
       el('div', { class: 'topbar__title' }, [document.createTextNode('TimeSlowDown')]),
       el('div', { class: 'topbar__right' }, [
         // 无 aria-label：accessible name 来自可见文本（符号+vh 文本），避免 label-content-name-mismatch
-        el('button', { class: 'btn btn--sm btn--ghost', onclick: () => navigate('search') }, ['⌕', el('span', { class: 'vh' }, ['搜索瞬间'])]),
-        el('button', { class: 'btn btn--sm btn--ghost', onclick: () => navigate('settings') }, ['⚙︎', el('span', { class: 'vh' }, ['设置'])]),
+        el('button', { class: 'btn btn--sm btn--ghost', onclick: () => navigate('search') }, ['⌕', el('span', { class: 'vh' }, [t('nav.search')])]),
+        el('button', { class: 'btn btn--sm btn--ghost', onclick: () => navigate('settings') }, ['⚙︎', el('span', { class: 'vh' }, [t('nav.settings')])]),
       ]),
     ]);
     app.appendChild(top);
@@ -94,19 +94,19 @@ const App = (() => {
 
   function renderTabbar(active) {
     const tabs = [
-      { id: 'today', icon: '⚬', label: '回声' },
-      { id: 'wilderness', icon: '◧', label: '旷野' },
-      { id: 'media', icon: '◈', label: '影像' },
-      { id: 'ai', icon: '✦', label: 'AI' },
-      { id: 'settings', icon: '⚙', label: '设置' },
+      { id: 'today', icon: '⚬', label: t('tab.echo') },
+      { id: 'wilderness', icon: '◧', label: t('tab.wilderness') },
+      { id: 'media', icon: '◈', label: t('tab.media') },
+      { id: 'ai', icon: '✦', label: t('tab.ai') },
+      { id: 'settings', icon: '⚙', label: t('tab.settings') },
     ];
-    return el('nav', { class: 'tabbar' }, tabs.map(t =>
+    return el('nav', { class: 'tabbar' }, tabs.map(tab =>
       el('button', {
-        class: 'tabbar__btn' + (active === t.id ? ' is-active' : ''),
-        onclick: () => { haptic('impact'); navigate(t.id); },
+        class: 'tabbar__btn' + (active === tab.id ? ' is-active' : ''),
+        onclick: () => { haptic('impact'); navigate(tab.id); },
       }, [
-        el('span', { class: 'tabbar__icon' }, [t.icon]),
-        el('span', { class: 'tabbar__label' }, [t.label]),
+        el('span', { class: 'tabbar__icon' }, [tab.icon]),
+        el('span', { class: 'tabbar__label' }, [tab.label]),
       ])
     ));
   }
@@ -201,50 +201,46 @@ const App = (() => {
       // 0: 承诺
       () => el('div', { class: 'text-center', style: 'padding-top:20vh;' }, [
         el('div', { style: 'font-size:56px;margin-bottom:24px;' }, ['⊜']),
-        el('h1', { class: 'h1 serif', style: 'margin-bottom:16px;' }, ['让走过的时间，']),
-        el('h1', { class: 'h1 serif', style: 'margin-bottom:32px;' }, ['长成你的人生。']),
+        el('h1', { class: 'h1 serif', style: 'margin-bottom:16px;' }, [t('onb.title_1')]),
+        el('h1', { class: 'h1 serif', style: 'margin-bottom:32px;' }, [t('onb.title_2')]),
         el('p', { class: 'lead muted', style: 'margin-bottom:48px;' }, [
-          'TSD 不要求你每天记新东西。',
-          el('br'),
-          '它每天把你带回一个过去的瞬间，',
-          el('br'),
-          '让记忆在反复回访里变厚。'
+          t('onb.intro'),
         ]),
-        el('button', { class: 'btn btn--primary btn--lg btn--block', onclick: next }, ['开始第一次回访']),
-        el('button', { class: 'btn btn--ghost btn--block mt-3', style: 'font-size:13px;color:var(--fg-mute);', onclick: finish }, ['先逛逛，之后再设置']),
+        el('button', { class: 'btn btn--primary btn--lg btn--block', onclick: next }, [t('onb.cta_start')]),
+        el('button', { class: 'btn btn--ghost btn--block mt-3', style: 'font-size:13px;color:var(--fg-mute);', onclick: finish }, [t('onb.cta_skip')]),
       ]),
       // 1: 自造第一个瞬间（D-A1：60 秒内自造正峰，让回访演示用用户自己的内容）
       () => el('div', { class: 'text-center', style: 'padding-top:10vh;' }, [
-        el('h2', { class: 'h2 mb-3' }, ['留一句今天的小事']),
-        el('p', { class: 'muted mb-5', style: 'font-size:13px;' }, ['一个词就够——它会成为你第一个能被"带回"的瞬间。']),
-        el('textarea', { id: 'onboard-seed', placeholder: '比如：今天阳光很好，在阳台站了一会儿。', style: 'width:100%;min-height:90px;padding:14px;background:var(--bg-elev);border:1px solid var(--line-strong);border-radius:14px;font-size:15px;font-family:var(--font-serif);resize:none;' }),
+        el('h2', { class: 'h2 mb-3' }, [t('onb.seed_prompt')]),
+        el('p', { class: 'muted mb-5', style: 'font-size:13px;' }, [t('onb.seed_hint')]),
+        el('textarea', { id: 'onboard-seed', placeholder: t('onb.seed_example'), style: 'width:100%;min-height:90px;padding:14px;background:var(--bg-elev);border:1px solid var(--line-strong);border-radius:14px;font-size:15px;font-family:var(--font-serif);resize:none;' }),
         el('div', { class: 'flex gap-3 mt-4' }, [
-          el('button', { class: 'btn btn--ghost btn--lg', style: 'flex:1', onclick: () => next() }, ['跳过']),
+          el('button', { class: 'btn btn--ghost btn--lg', style: 'flex:1', onclick: () => next() }, [t('onb.seed_skip')]),
           el('button', { class: 'btn btn--primary btn--lg', style: 'flex:1', onclick: () => {
-            const t = ($('#onboard-seed') ? $('#onboard-seed').value : '').trim();
-            if (t) { const mm = TSD.addMoment({ quote: t, kind: 'grass', people: [], when: { precision: 'day', text: '今天', start: Math.floor(Date.now() / 1000) } }); userSeedId = mm.id; haptic('success'); }
+            const seedText = ($('#onboard-seed') ? $('#onboard-seed').value : '').trim();
+            if (seedText) { const mm = TSD.addMoment({ quote: seedText, kind: 'grass', people: [], when: { precision: 'day', text: t('rel.today'), start: Math.floor(Date.now() / 1000) } }); userSeedId = mm.id; haptic('success'); }
             next();
-          } }, ['留住']),
+          } }, [t('onb.seed_cta_keep')]),
         ]),
       ]),
       // 2: 第一次回声体验（优先用用户自造的瞬间，否则种子）
       () => {
         const m = (userSeedId && TSD.getMoment(userSeedId)) || TSD.SEED_MOMENTS[2];
         return el('div', { class: 'text-center' }, [
-          el('div', { class: 'section-title', style: 'margin-top:8vh;' }, ['今天的回声']),
-          echoCard(m, { navigate, ctaText: '停留一下', ctaAction: next }),
+          el('div', { class: 'section-title', style: 'margin-top:8vh;' }, [t('onb.section_now')]),
+          echoCard(m, { navigate, ctaText: t('onb.stay_a_moment'), ctaAction: next }),
           el('p', { class: 'muted', style: 'font-size:13px;margin-top:24px;' }, [
-            '这是 TSD 从你的过去里带回的一个瞬间。',
+            t('onb.echo_hint_1'),
             el('br'),
-            '回访不需要你写新东西，只需被带回。',
+            t('onb.echo_hint_2'),
           ]),
         ]);
       },
       // 2: 才问生日
       () => el('div', { class: 'text-center', style: 'padding-top:12vh;' }, [
         el('div', { style: 'font-size:40px;margin-bottom:20px;' }, ['▦']),
-        el('h2', { class: 'h2', style: 'margin-bottom:12px;' }, ['你大概哪一年出生？']),
-        el('p', { class: 'muted mb-6' }, ['用来画出你的人生周格。可以跳过。']),
+        el('h2', { class: 'h2', style: 'margin-bottom:12px;' }, [t('onb.birth_title')]),
+        el('p', { class: 'muted mb-6' }, [t('onb.birth_prompt')]),
         el('input', {
           type: 'number', placeholder: '比如 1990',
           style: 'text-align:center;font-size:24px;padding:16px;width:100%;background:var(--bg-elev);border:1px solid var(--line-strong);border-radius:14px;margin-bottom:24px;',
@@ -1239,10 +1235,12 @@ const App = (() => {
         el('button', { class: 'btn btn--primary btn--block mt-2', onclick: () => { if (TSD.restoreTombstone()) { toast('已恢复删除前的数据'); navigate('today', { replace: true }); } else toast('恢复失败'); } }, ['撤销删除']),
       ]) : null,
 
-      el('div', { class: 'section-title' }, ['外观']),
+      el('div', { class: 'section-title' }, [t('settings.appearance')]),
       el('div', { class: 'card' }, [
-        el('div', { class: 'setting-row' }, [el('div', { class: 'setting-row__main' }, [el('div', { class: 'setting-row__title' }, ['深色模式']), el('div', { class: 'setting-row__sub' }, [{ auto: '跟随系统', dark: '始终深色', light: '始终浅色' }[s.settings.darkMode || 'auto']])]), el('button', { class: 'btn btn--sm btn--ghost', onclick: () => { const cycle = { auto: 'dark', dark: 'light', light: 'auto' }; const next = cycle[s.settings.darkMode || 'auto']; TSD.setSetting('darkMode', next); applyTheme(next); navigate('settings'); } }, ['切换'])]),
-        el('div', { class: 'setting-row' }, [el('div', { class: 'setting-row__main' }, [el('div', { class: 'setting-row__title' }, ['减少动效']), el('div', { class: 'setting-row__sub' }, ['降低动画与过渡'])]), el('button', { class: 'switch' + (s.settings.reducedMotion ? ' is-on' : ''), onclick: () => { TSD.setSetting('reducedMotion', !s.settings.reducedMotion); document.body.style.transition = 'none'; navigate('settings'); } }, [])]),
+        el('div', { class: 'setting-row' }, [el('div', { class: 'setting-row__main' }, [el('div', { class: 'setting-row__title' }, [t('settings.dark_mode')]), el('div', { class: 'setting-row__sub' }, [{ auto: t('settings.dark_auto'), dark: t('settings.dark_dark'), light: t('settings.dark_light') }[s.settings.darkMode || 'auto']])]), el('button', { class: 'btn btn--sm btn--ghost', onclick: () => { const cycle = { auto: 'dark', dark: 'light', light: 'auto' }; const next = cycle[s.settings.darkMode || 'auto']; TSD.setSetting('darkMode', next); applyTheme(next); navigate('settings'); } }, [t('settings.switch')])]),
+        el('div', { class: 'setting-row' }, [el('div', { class: 'setting-row__main' }, [el('div', { class: 'setting-row__title' }, [t('settings.reduced_motion')]), el('div', { class: 'setting-row__sub' }, [t('settings.reduced_motion_sub')])]), el('button', { class: 'switch' + (s.settings.reducedMotion ? ' is-on' : ''), onclick: () => { TSD.setSetting('reducedMotion', !s.settings.reducedMotion); document.body.style.transition = 'none'; navigate('settings'); } }, [])]),
+        // 语言切换（中英双语 · 守 manifest 声明）：点击在 zh/en 间切换，setLocale 触发重渲染
+        el('div', { class: 'setting-row' }, [el('div', { class: 'setting-row__main' }, [el('div', { class: 'setting-row__title' }, [t('settings.language')]), el('div', { class: 'setting-row__sub' }, [t('settings.language_sub')])]), el('button', { class: 'btn btn--sm btn--ghost', onclick: () => { I18N.setLocale(I18N.getLocale() === 'zh' ? 'en' : 'zh'); } }, [I18N.getLocale() === 'zh' ? '中文' : 'English'])]),
       ]),
 
       // 主屏幕活体存在（Finch 式 home-screen widget · D1/D7 54/37 超 Duolingo）
@@ -3049,7 +3047,12 @@ const App = (() => {
     else revealCaps();
   }
 
-  return { start, navigate };
+  // rerender：切换语言时重渲染当前视图（不 reload，保持数据与滚动状态）
+  function rerender() {
+    if (currentView) render(location.hash.replace('#', '') || 'today');
+  }
+
+  return { start, navigate, rerender };
 })();
 
 document.addEventListener('DOMContentLoaded', () => App.start());
