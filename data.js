@@ -912,6 +912,54 @@ const TSD = (() => {
     };
   }
 
+  // ---------- M2 验证测量脚手架（北极星：回访固化假设，DC-2026-155）----------
+  // 假设：被回访≥2次的瞬间，可讲述率显著高于未回访。
+  // 可讲述率无自动客观指标（需访谈员评分 0-3），此处提供"行为代理指标"：
+  // 层叠文本长度/情感词数/回访间隔，供 M2 访谈对照。导出 CSV 供研究者分析。
+  // 守"数据不丢"：只读 state，不改。
+  function m2CohortStats() {
+    const ms = state.moments.filter(m => m.confirmed !== false);
+    const revs = state.revisits || [];
+    const countOf = id => revs.filter(r => r.momentId === id).length;
+    // 分组：revisited (≥2) vs notRevisited (0-1)
+    const revisited = [], notRevisited = [];
+    ms.forEach(m => {
+      const c = countOf(m.id);
+      const myRevs = revs.filter(r => r.momentId === m.id).sort((a, b) => a.at - b.at);
+      // 层叠文本代理：所有回访 feeling 文本拼接后的长度 + 非空 feeling 数
+      const feelings = myRevs.map(r => (r.feeling || '').trim()).filter(Boolean);
+      const totalLen = feelings.reduce((n, s) => n + s.length, 0);
+      const tagCount = myRevs.filter(r => r.feelingTag).length;
+      // 首末回访间隔（天）—— 回访跨度反映记忆是否被反复提取
+      const spanDays = myRevs.length >= 2 ? Math.round((myRevs[myRevs.length - 1].at - myRevs[0].at) / 864e5) : 0;
+      const row = { id: m.id, quote: (m.quote || '').slice(0, 40), revisitCount: c, layerCount: feelings.length, layerTextLen: totalLen, feelingTagCount: tagCount, spanDays, createdAt: m.createdAt };
+      if (c >= 2) revisited.push(row); else notRevisited.push(row);
+    });
+    const avg = arr => arr.length ? Math.round(arr.reduce((n, r) => n + r.layerTextLen, 0) / arr.length) : 0;
+    const avgLayer = arr => arr.length ? (arr.reduce((n, r) => n + r.layerCount, 0) / arr.length).toFixed(2) : '0';
+    return {
+      hypothesis: 'DC-2026-155: revisited≥2 moments have higher tellability than notRevisited',
+      note: 'tellability needs interviewer rating (0-3); these are behavioral proxies',
+      revisitedCount: revisited.length,
+      notRevisitedCount: notRevisited.length,
+      proxies: {
+        revisited: { avgLayerTextLen: avg(revisited), avgLayerCount: avgLayer(revisited) },
+        notRevisited: { avgLayerTextLen: avg(notRevisited), avgLayerCount: avgLayer(notRevisited) },
+      },
+      rows: { revisited, notRevisited },
+    };
+  }
+  // M2 验证用 CSV 导出（研究者导入 Excel/SPSS）
+  function m2ExportCSV() {
+    const s = m2CohortStats();
+    const header = 'cohort,momentId,revisitCount,layerCount,layerTextLen,feelingTagCount,spanDays,createdAt,quote';
+    const lines = [header];
+    const esc = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+    s.rows.revisited.forEach(r => lines.push(['revisited', r.id, r.revisitCount, r.layerCount, r.layerTextLen, r.feelingTagCount, r.spanDays, r.createdAt, r.quote].map(esc).join(',')));
+    s.rows.notRevisited.forEach(r => lines.push(['notRevisited', r.id, r.revisitCount, r.layerCount, r.layerTextLen, r.feelingTagCount, r.spanDays, r.createdAt, r.quote].map(esc).join(',')));
+    return lines.join('\n');
+  }
+
   // ---------- 导出 / 清空 ----------
   function exportData() {
     return JSON.parse(JSON.stringify(state));
@@ -1260,6 +1308,8 @@ const TSD = (() => {
     checkAchievements, getAchievements,
     addCapsule, getCapsules, checkCapsuleUnlocks, markCapsuleViewed,
     reportStats,
+    // M2 验证测量脚手架（DC-2026-155 北极星假设）
+    m2CohortStats, m2ExportCSV,
     exportData, clearAll, lifeWeeks,
     widgetState, badgeState,
     // iCloud 云同步抽象层（provider 注入式，默认 no-op 守本机优先）

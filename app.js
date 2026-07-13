@@ -1841,6 +1841,25 @@ const App = (() => {
       // Life Mash（1SE 式蒙太奇 · 把最近回访的瞬间照片编译成 15s 幻灯片）
       // 守原则9：按需生成非每日；无 streak。复用现有 share-card 基建。
       lifeMashSection(),
+      // M2 验证研究导出（DC-2026-155 北极星假设测量脚手架，供研究者）
+      el('div', { class: 'card mb-3' }, [
+        el('div', { class: 'echo-card__label' }, [t('report.m2-title')]),
+        el('p', { class: 'muted', style: 'font-size:12px;margin:6px 0 12px;line-height:1.5;' }, [t('report.m2-sub')]),
+        (() => { const m2 = TSD.m2CohortStats(); return el('div', { style: 'font-size:12px;line-height:1.7;color:var(--fg-mute);' }, [
+          t('report.m2-revisited', { n: m2.revisitedCount }) + ' · ' + t('report.m2-not-revisited', { n: m2.notRevisitedCount }), el('br'),
+          t('report.m2-proxy-revisited', { len: m2.proxies.revisited.avgLayerTextLen, layers: m2.proxies.revisited.avgLayerCount }), el('br'),
+          t('report.m2-proxy-not-revisited', { len: m2.proxies.notRevisited.avgLayerTextLen, layers: m2.proxies.notRevisited.avgLayerCount }),
+        ]); })(),
+        el('button', { class: 'btn btn--ghost btn--sm mt-3', onclick: () => {
+          const csv = TSD.m2ExportCSV();
+          const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+          const url = URL.createObjectURL(blob);
+          const a = el('a', { href: url, download: 'tsd-m2-cohort-' + Date.now() + '.csv' });
+          document.body.appendChild(a); a.click(); a.remove();
+          setTimeout(() => URL.revokeObjectURL(url), 1000);
+          toast(t('report.m2-exported'));
+        } }, [t('report.m2-export')]),
+      ]),
       el('p', { class: 'muted mt-5', style: 'font-size:11px;text-align:center;' }, [t('report.ref-wrapped')]),
     ]));
   });
