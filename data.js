@@ -717,33 +717,74 @@ const TSD = (() => {
   }
 
   // 与过去自己对话：单轮问答，AI 以"写那条瞬间的自己"的视角作答。
-  // 真实 LLM 调用留待后端代理（防 key 暴露，参 M1.2 暂缓说明）；
+  // LLM 路径：若 aiConsent && _llmEndpoint → 走后端代理（防 key 暴露），失败回退本地 mirror。
   // 本地 fallback：基于瞬间文本的"镜像式"回应模板（不伪造未在原文中出现的信息）。
-  function askPastSelf(mId, question) {
+  let _llmEndpoint = null;
+  function setLlmEndpoint(url) { _llmEndpoint = url ? String(url).replace(/\/+$/, '') : null; }
+  function hasLlmEndpoint() { return !!_llmEndpoint; }
+
+  function localMirrorAnswer(m, q) {
+    const quote = m.quote || '';
+    if (/为什么|为啥|why/i.test(q)) {
+      return '我也不知道为什么。但当时我写下的是："' + quote + '"。你问我这个，是因为现在的你已经在重新看它了吗？';
+    } else if (/后悔|遗憾|不想/i.test(q)) {
+      return '我不能替你回答有没有后悔。我那时只记下了："' + quote + '"。你现在这样问，是不是已经有了一点答案？';
+    } else if (/想|希望|wish/i.test(q)) {
+      return '我那时想要的，可能就藏在这句里："' + quote + '"。现在的你，还想要同样的东西吗？';
+    } else if (/怎么|如何|how/i.test(q)) {
+      return '具体怎么走到那一步，我自己也讲不清。我只留下这一句："' + quote + '"。你是想沿着它往回走一段吗？';
+    }
+    return '我那时写的是："' + quote + '"。其余的我也说不准。你是想和我再待一会儿，还是想走了？';
+  }
+
+  async function askPastSelf(mId, question) {
     const m = getMoment(mId);
     if (!m || !question || !question.trim()) return null;
     const q = question.trim();
-    // 镜像式本地回应：把用户的问题温和地"还回去"——引导用户自己回到那一刻
-    // 不编造原文之外的"事实"，守诚实原则
-    const quote = m.quote || '';
-    const lower = q.toLowerCase();
-    let mirror;
-    if (/为什么|为啥|why/i.test(q)) {
-      mirror = '我也不知道为什么。但当时我写下的是："' + quote + '"。你问我这个，是因为现在的你已经在重新看它了吗？';
-    } else if (/后悔|遗憾|不想|遗憾/i.test(q)) {
-      mirror = '我不能替你回答有没有后悔。我那时只记下了："' + quote + '"。你现在这样问，是不是已经有了一点答案？';
-    } else if (/想|希望|wish|希望/i.test(q)) {
-      mirror = '我那时想要的，可能就藏在这句里："' + quote + '"。现在的你，还想要同样的东西吗？';
-    } else if (/怎么|如何|how/i.test(q)) {
-      mirror = '具体怎么走到那一步，我自己也讲不清。我只留下这一句："' + quote + '"。你是想沿着它往回走一段吗？';
-    } else {
-      mirror = '我那时写的是："' + quote + '"。其余的我也说不准。你是想和我再待一会儿，还是想走了？';
+
+    // LLM 路径：需 aiConsent + endpoint。失败静默回退本地 mirror（守"不阻断主流程"）。
+    if (state.aiConsent && _llmEndpoint) {
+      let llmFailed = false;
+      try {
+        const resp = await fetch(_llmEndpoint + '/ask', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            moment: { quote: m.quote, kind: m.kind, createdAt: m.createdAt },
+            question: q,
+            locale: (typeof I18N !== 'undefined' && I18N.getLocale) ? (I18N.getLocale() || 'zh').slice(0, 2) : 'zh',
+          }),
+        });
+        if (resp.ok) {
+          const data = await resp.json();
+          if (data && data.answer && data.mode === 'llm') {
+            const answer = { question: q, answer: data.answer, at: Date.now(), mode: 'llm' };
+            if (!m.reunions) m.reunions = [];
+            m.reunions.push(answer);
+            save();
+            logAiTask({ type: 'T2', payload: { action: 'askPastSelf-llm', momentId: m.id }, result: 'llm:' + (data.answer.length + '字'), localOnly: true });
+            return answer;
+          }
+        }
+        llmFailed = true;
+      } catch (e) {
+        llmFailed = true;
+      }
+      // 回退本地 mirror，标记为 fallback（让 UI 可提示）
+      const answer = { question: q, answer: localMirrorAnswer(m, q), at: Date.now(), mode: 'llm-failed-fallback' };
+      if (!m.reunions) m.reunions = [];
+      m.reunions.push(answer);
+      save();
+      if (llmFailed) logAiTask({ type: 'T2', payload: { action: 'askPastSelf-fallback', momentId: m.id }, result: 'fallback', localOnly: true });
+      return answer;
     }
+
+    // 本地 mirror 路径（无 aiConsent 或无 endpoint）
     const answer = {
       question: q,
-      answer: mirror,
+      answer: localMirrorAnswer(m, q),
       at: Date.now(),
-      mode: 'local-mirror', // 标识本地 fallback，区别于未来 LLM 增强
+      mode: 'local-mirror', // 标识本地 fallback，区别于 LLM 增强
     };
     // 作为"重逢印记"追加（复用现有 imprints 结构，若有）
     if (!m.reunions) m.reunions = [];
@@ -1321,6 +1362,7 @@ const TSD = (() => {
     EMOTION_GRID, THINKING_TRAPS,
     REVISIT_DIALOGUE_PROMPTS, getDialogue, setDialogueAnswer,
     askPastSelf, getReunions,
+    setLlmEndpoint, hasLlmEndpoint,
     FEELING_TAGS, SEED_MOMENTS,
   };
 })();

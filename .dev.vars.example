@@ -1,0 +1,4 @@
+# TSD LLM 代理本地开发用密钥（复制为 .dev.vars 后填入真 key）
+# .dev.vars 已在 .gitignore，切勿提交真 key
+ANTHROPIC_API_KEY=sk-ant-xxxxxxxxxxxxxxxxxxxx
+ALLOWED_ORIGIN=http://localhost:8799

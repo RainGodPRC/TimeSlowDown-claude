@@ -503,6 +503,10 @@ const I18N = (() => {
     'moment.precise-emotion': { zh: "此刻更精确的情绪", en: "A more precise emotion for this moment" },
     'today.echo-description': { zh: "每天一次，TSD 把你带回一个旧瞬间。默认隐藏人物和原文。", en: "Once a day, TSD brings you back to an old moment. People and original words are hidden by default." },
     'ai.per-task-consent': { zh: "每次任务前明确授权，可撤回", en: "Explicit authorization before each task, revocable" },
+    'ai.llm-endpoint': { zh: "AI 增强端点（后端代理）", en: "AI enhancement endpoint (backend proxy)" },
+    'ai.llm-endpoint-empty': { zh: "未填 → 永远走本地镜像，不联网", en: "Empty → always uses local mirror, no network" },
+    'ai.llm-endpoint-set': { zh: "已配置（连上时走真实对话）", en: "Configured (uses real conversation when reachable)" },
+    'ai.llm-endpoint-saved': { zh: "端点已保存", en: "Endpoint saved" },
     'settings.permanent-delete': { zh: "永久删除 · 生成回执", en: "Permanent deletion · receipt generated" },
     'search.no-match': { zh: "没有匹配的瞬间。换个词试试？", en: "No matching moments. Try a different word?" },
     'settings.live-icon-dot': { zh: "活体图标点", en: "Live icon dot" },
@@ -892,6 +896,8 @@ const I18N = (() => {
     'ask.local_mirror_1': { zh: '此时的回答来自本地镜像——它把你温柔地还回去，', en: 'This answer comes from a local mirror — it gently returns you to yourself,' },
     'ask.local_mirror_2': { zh: '不替那时的自己编造原文之外的话。', en: 'not fabricating words beyond the original text for your then-self.' },
     'ask.you_asked': { zh: '你问："{q}"', en: 'You asked: "{q}"' },
+    'ask.thinking': { zh: '那时的我在想……', en: 'The then-me is thinking…' },
+    'ask.llm-failed-hint': { zh: '（没能连上那时的我，先用本地镜像回了你）', en: '(Could not reach the then-me; answered with the local mirror instead)' },
 
     // ---------- thinking traps / reframe ----------
     'traps.intro_1': { zh: '不是诊断，只是认一认。', en: 'This is not a diagnosis, just a recognition.' },

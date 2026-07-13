@@ -2,3 +2,9 @@
 *.log
 node_modules/
 www/
+
+# TSD LLM 代理密钥（绝不提交）
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+.wrangler/

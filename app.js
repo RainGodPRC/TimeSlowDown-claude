@@ -1256,6 +1256,20 @@ const App = (() => {
           el('button', { class: 'switch' + (s.aiConsent ? ' is-on' : ''), onclick: () => { TSD.setAiConsent(!s.aiConsent); navigate('settings'); } }, []),
         ]),
         el('div', { class: 'setting-row', onclick: () => navigate('ai') }, [el('div', { class: 'setting-row__main' }, [el('div', { class: 'setting-row__title' }, [t('ai.task-ledger')]), el('div', { class: 'setting-row__sub' }, [t('ai.view-revoke-all')])]), el('div', { class: 'list-row__right' }, ['▸'])]),
+        // LLM 增强端点（后端代理 URL，防 key 暴露）。未填 → 永远走本地 mirror，守"本机优先可降级"
+        el('div', { class: 'setting-row' }, [
+          el('div', { class: 'setting-row__main' }, [
+            el('div', { class: 'setting-row__title' }, [t('ai.llm-endpoint')]),
+            el('div', { class: 'setting-row__sub' }, [TSD.hasLlmEndpoint() ? t('ai.llm-endpoint-set') : t('ai.llm-endpoint-empty')]),
+            el('input', {
+              type: 'url',
+              placeholder: 'https://tsd-llm.xxx.workers.dev',
+              value: '',
+              style: 'width:100%;margin-top:8px;padding:8px 10px;background:var(--bg-elev);border:1px solid var(--line-strong);border-radius:10px;font-size:13px;',
+              onchange: (e) => { const v = (e.target.value || '').trim(); if (v) TSD.setLlmEndpoint(v); else TSD.setLlmEndpoint(null); toast(t('ai.llm-endpoint-saved')); navigate('settings'); },
+            }),
+          ]),
+        ]),
       ]),
 
       el('div', { class: 'section-title' }, [t('settings.cloud-sync-title')]),
@@ -2913,10 +2927,14 @@ const App = (() => {
           }),
           el('div', { class: 'flex gap-3 mt-3' }, [
             el('button', { class: 'btn btn--ghost btn--lg', style: 'flex:1', onclick: () => closeRitual(overlay) }, [t('common.never-mind')]),
-            el('button', { class: 'btn btn--primary btn--lg', style: 'flex:1', onclick: () => {
+            el('button', { class: 'btn btn--primary btn--lg', style: 'flex:1', onclick: async () => {
               const q = ($('#ask-input', content) || {}).value;
               if (!q || !q.trim()) { toast(t('toast.ask_empty')); return; }
-              const ans = TSD.askPastSelf(m.id, q);
+              // loading 态：LLM 路径是异步的
+              const loadingView = el('div', { style: 'text-align:center;padding:24px 0;color:var(--fg-mute);font-size:13px;', role: 'status', 'aria-live': 'polite' }, [t('ask.thinking')]);
+              content.innerHTML = '';
+              content.appendChild(loadingView);
+              const ans = await TSD.askPastSelf(m.id, q);
               haptic('impact');
               render(ans);
             } }, [t('ask.submit')]),
@@ -2931,6 +2949,8 @@ const App = (() => {
             el('div', { class: 'muted', style: 'font-size:11px;margin-bottom:6px;' }, [t('revisit.then-self')]),
             el('div', { class: 'serif', style: 'font-size:15px;line-height:1.6;color:var(--fg);' }, ['"' + answer.answer + '"']),
           ]),
+          // LLM 失败回退：温和提示，不催促（守原则5）
+          answer.mode === 'llm-failed-fallback' ? el('p', { class: 'muted mt-2', style: 'font-size:11px;text-align:center;' }, [t('ask.llm-failed-hint')]) : null,
           el('button', { class: 'btn btn--primary btn--lg btn--block mt-4', onclick: () => { closeRitual(overlay); } }, [t('common.thats-it')]),
           el('p', { class: 'muted mt-3', style: 'font-size:11px;text-align:center;' }, [t('revisit.exchange-saved-as-imprint')]),
         ]),
