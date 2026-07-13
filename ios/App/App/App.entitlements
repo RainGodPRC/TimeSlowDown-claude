@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- App Group：主 app 与 Widget Extension 共享 UserDefaults（widget 读 PWA 写入的状态） -->
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.com.raingodprc.tsdrevisit</string>
+	</array>
+</dict>
+</plist>

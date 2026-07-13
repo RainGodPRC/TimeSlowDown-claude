@@ -15,6 +15,12 @@ const config: CapacitorConfig = {
     // 限制 WKWebView 只能导航到 App-Bound Domains（ATS 安全，防意外跳外部域）
     limitsNavigationsToAppBoundDomains: true,
   },
+  // 自定义本地 plugin 注册（非 npm 包，须显式列名 → Capacitor 自动生成注册代码）
+  // TSDWidgetPlugin：把 PWA widgetState 写入 App Group UserDefaults，供 WidgetKit 读取
+  // 注：packageClassList 是 iOS 工程字段，不在 CapacitorConfig TS 类型里，用 as 断言保留
+  ...({
+    packageClassList: ['HapticsPlugin', 'LocalNotificationsPlugin', 'TSDWidgetPlugin'],
+  } as any),
   plugins: {
     LocalNotifications: {
       // 品牌化通知：smallIcon/iconColor/sound 需对应原生资源就绪后生效（参 ZCode）
