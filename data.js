@@ -273,6 +273,7 @@ const TSD = (() => {
         reducedMotion: false,
         darkMode: 'auto',
         soundOn: false,
+        cloudSync: false, // iCloud 同步开关（默认关，守"本机优先"）。provider 就绪后打开
       },
       account: { tier: 'free', signedIn: false }, // free | pass | plus | family
       aiLog: [], // AI 任务记录
@@ -1200,6 +1201,45 @@ const TSD = (() => {
     return { level: w.hasNewEcho ? 1 : 0, dot: w.hasNewEcho };
   }
 
+  // ---------- iCloud / 云同步抽象层（可插拔 provider，守"本机优先"）----------
+  // 设计：data.js 不直接依赖 CloudKit（原生 API，需 Swift CAPPlugin，超"单文件 PWA"边界）。
+  // 提供 syncToCloud/pullFromCloud 接口 + setCloudProvider(provider) 注入点。
+  // provider 需实现：{ push(stateSnapshot): Promise<void>, pull(): Promise<stateSnapshot|null> }
+  // 当前 _cloudProvider=null → 所有 sync 操作 no-op + 返回 false，守"本机优先不联网"。
+  // 用户配好 CloudKit container + 装原生插件后，app.js 启动时注入 provider 即可激活。
+  let _cloudProvider = null;
+  function setCloudProvider(p) { _cloudProvider = p; }
+  function hasCloudProvider() { return !!_cloudProvider; }
+  // 上推：把当前 state（含 media 引用→portable）推到云。last-writer-wins，不引入 CRDT。
+  async function syncToCloud() {
+    if (!_cloudProvider) return { ok: false, reason: 'no-provider' };
+    if (!state || !(state.settings && state.settings.cloudSync)) return { ok: false, reason: 'disabled' };
+    try {
+      // 复用 makePackage 的 portable 化逻辑（media.id→base64），保证云快照自包含
+      const pkg = await makePackage();
+      await _cloudProvider.push({ data: pkg.data, exportedAt: pkg.exportedAt, appVersion: pkg.appVersion });
+      return { ok: true, at: pkg.exportedAt };
+    } catch (e) { return { ok: false, reason: 'error', error: String(e) }; }
+  }
+  // 拉取：从云拉快照，与本地 last-writer-wins 合并（云较新→覆盖本地，本地较新→跳过）。
+  async function pullFromCloud() {
+    if (!_cloudProvider) return { ok: false, reason: 'no-provider' };
+    try {
+      const remote = await _cloudProvider.pull();
+      if (!remote || !remote.data) return { ok: false, reason: 'empty' };
+      // 简单 LWW：比较 exportedAt；本地无 exportedAt 视为 0（永远被覆盖）。
+      const localAt = (state && state._lastSyncedAt) || 0;
+      const remoteAt = remote.exportedAt || 0;
+      if (remoteAt <= localAt) return { ok: false, reason: 'stale' };
+      // 用 applyImport 路径还原（portable media → 本机 media store → 引用）
+      const fakePkg = { schema: 'tsd-memory-package', pkgVersion: 2, data: remote.data, checksum: '', exportedAt: remoteAt };
+      await applyImport(fakePkg);
+      if (state) state._lastSyncedAt = remoteAt;
+      save();
+      return { ok: true, at: remoteAt };
+    } catch (e) { return { ok: false, reason: 'error', error: String(e) }; }
+  }
+
   return {
     reset: () => { state = freshState(); save(); },
     init,
@@ -1222,6 +1262,8 @@ const TSD = (() => {
     reportStats,
     exportData, clearAll, lifeWeeks,
     widgetState, badgeState,
+    // iCloud 云同步抽象层（provider 注入式，默认 no-op 守本机优先）
+    setCloudProvider, hasCloudProvider, syncToCloud, pullFromCloud,
     getGrove, setGrovePartner, leaveGrove, exportGroveGift, importGroveGift, groveEcho, markGroveViewed, getGroveReceived,
     makePackage, importPackage, applyImport,
     softDelete, hasTombstone, restoreTombstone, clearTombstone,

@@ -1258,6 +1258,26 @@ const App = (() => {
         el('div', { class: 'setting-row', onclick: () => navigate('ai') }, [el('div', { class: 'setting-row__main' }, [el('div', { class: 'setting-row__title' }, [t('ai.task-ledger')]), el('div', { class: 'setting-row__sub' }, [t('ai.view-revoke-all')])]), el('div', { class: 'list-row__right' }, ['▸'])]),
       ]),
 
+      el('div', { class: 'section-title' }, [t('settings.cloud-sync-title')]),
+      el('div', { class: 'card' }, [
+        el('div', { class: 'setting-row' }, [
+          el('div', { class: 'setting-row__main' }, [el('div', { class: 'setting-row__title' }, [t('settings.icloud-sync')]), el('div', { class: 'setting-row__sub' }, [TSD.hasCloudProvider() ? (s.settings.cloudSync ? t('settings.cloud-sync-on') : t('settings.cloud-sync-off')) : t('settings.cloud-sync-no-provider')])]),
+          el('button', { class: 'switch' + (s.settings.cloudSync && TSD.hasCloudProvider() ? ' is-on' : ''), onclick: async () => {
+            if (!TSD.hasCloudProvider()) { toast(t('settings.cloud-sync-need-provider')); return; }
+            TSD.setSetting('cloudSync', !s.settings.cloudSync);
+            navigate('settings');
+            if (s.settings.cloudSync) { const r = await TSD.syncToCloud(); toast(r.ok ? t('settings.cloud-synced') : t('settings.cloud-sync-failed')); }
+          } }, []),
+        ]),
+        el('div', { class: 'setting-row', onclick: async () => {
+          if (!TSD.hasCloudProvider()) { toast(t('settings.cloud-sync-need-provider')); return; }
+          toast(t('settings.cloud-pulling'));
+          const r = await TSD.pullFromCloud();
+          toast(r.ok ? t('settings.cloud-pulled') : t('settings.cloud-pull-failed'));
+          if (r.ok) navigate('today', { replace: true });
+        } }, [el('div', { class: 'setting-row__main' }, [el('div', { class: 'setting-row__title' }, [t('settings.cloud-pull')]), el('div', { class: 'setting-row__sub' }, [t('settings.cloud-pull-sub')])]), el('div', { class: 'list-row__right' }, ['⤓'])]),
+      ]),
+
       el('div', { class: 'section-title' }, [t('settings.memory-vault')]),
       el('div', { class: 'card' }, [
         el('div', { class: 'setting-row' }, [el('div', { class: 'setting-row__main' }, [el('div', { class: 'setting-row__title' }, [t('settings.local-data')]), el('div', { class: 'setting-row__sub' }, [t('settings.local_stats', {m: TSD.getMoments().length, r: TSD.raw().revisits.length, p: TSD.getMoments().filter(m => m.media).length})])]), el('span', { class: 'badge badge--pass' }, [t('settings.local')])]),
