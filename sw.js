@@ -1,6 +1,9 @@
 // TSD Claude Code 分支 Service Worker
+// 版本号与 index.html 资源 ?v= 查询串必须一致：caches.match 按完整 URL（含 query）匹配，
+// 不一致会导致 precache 命中失败 → 离线首次访问拿不到资源。
 const CACHE = 'tsd-cc-v43';
-const ASSETS = ['./', './index.html', './styles.css?v=34', './app.js?v=34', './data.js?v=34', './push.js?v=34', './widget.js?v=34', './manifest.json', './icon-192.png', './icon-512.png'];
+const VER = '43';
+const ASSETS = ['./', './index.html', `./styles.css?v=${VER}`, `./app.js?v=${VER}`, `./data.js?v=${VER}`, `./i18n.js?v=${VER}`, `./push.js?v=${VER}`, `./widget.js?v=${VER}`, './manifest.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting()));

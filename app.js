@@ -1278,9 +1278,12 @@ const App = (() => {
           el('div', { class: 'setting-row__main' }, [el('div', { class: 'setting-row__title' }, [t('settings.icloud-sync')]), el('div', { class: 'setting-row__sub' }, [TSD.hasCloudProvider() ? (s.settings.cloudSync ? t('settings.cloud-sync-on') : t('settings.cloud-sync-off')) : t('settings.cloud-sync-no-provider')])]),
           el('button', { class: 'switch' + (s.settings.cloudSync && TSD.hasCloudProvider() ? ' is-on' : ''), onclick: async () => {
             if (!TSD.hasCloudProvider()) { toast(t('settings.cloud-sync-need-provider')); return; }
-            TSD.setSetting('cloudSync', !s.settings.cloudSync);
+            // 注意：s 是进入路由时的快照，navigate 不刷新闭包里的 s。
+            // 故用 !s.settings.cloudSync 读"切换后的新值"，而非 s.settings.cloudSync（旧值）。
+            const newOn = !s.settings.cloudSync;
+            TSD.setSetting('cloudSync', newOn);
             navigate('settings');
-            if (s.settings.cloudSync) { const r = await TSD.syncToCloud(); toast(r.ok ? t('settings.cloud-synced') : t('settings.cloud-sync-failed')); }
+            if (newOn) { const r = await TSD.syncToCloud(); toast(r.ok ? t('settings.cloud-synced') : t('settings.cloud-sync-failed')); }
           } }, []),
         ]),
         el('div', { class: 'setting-row', onclick: async () => {

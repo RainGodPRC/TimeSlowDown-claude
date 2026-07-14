@@ -24,9 +24,14 @@ import WidgetKit
  */
 @objc(TSDWidgetPlugin)
 public class TSDWidgetPlugin: CAPPlugin, CAPBridgedPlugin {
-  public let id = "TSDWidgetPlugin"
-  public let tagged = "TSDWidgetPlugin"
+  // CAPBridgedPlugin 协议（Capacitor 6）要求 identifier / jsName / pluginMethods。
+  // jsName 必须与 widget.js 的 registerPlugin('TSDWidget') 一致；
+  // pluginMethods 必须列出所有暴露给 JS 的方法，否则 JSExport 不生成桥接。
+  public let identifier = "TSDWidgetPlugin"
   public let jsName = "TSDWidget"
+  public let pluginMethods: [CAPPluginMethod] = [
+    CAPPluginMethod(name: "writeWidgetState", returnType: CAPPluginReturnPromise),
+  ]
 
   /// App Group identifier —— 必须与主 target / Widget target 的 App Groups 一致。
   /// 用户在 Xcode → Signing & Capabilities → App Groups 配好后此处自动生效。

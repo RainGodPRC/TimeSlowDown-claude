@@ -70,12 +70,20 @@ function rateLimited(ip) {
   return arr.length > RATE_LIMIT_MAX;
 }
 
+// 模块级缓存：每次 fetch 把 env.ALLOWED_ORIGIN 注入进来，json() 读取它设 CORS 头。
+// 不能在 json() 里直接引用裸 ALLOWED_ORIGIN —— Workers module 作用域里 env 绑定不在全局，
+// 那样会导致 CORS 头永远是 '*'。这里显式接收，避免 env 泄漏到全局。
+let _allowOrigin = "*";
+function setAllowOrigin(env) {
+  _allowOrigin = (typeof env?.ALLOWED_ORIGIN === "string" && env.ALLOWED_ORIGIN) ? env.ALLOWED_ORIGIN : "*";
+}
+
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
     headers: {
       "content-type": "application/json; charset=utf-8",
-      "access-control-allow-origin": typeof ALLOWED_ORIGIN !== "undefined" ? ALLOWED_ORIGIN : "*",
+      "access-control-allow-origin": _allowOrigin,
       "access-control-allow-methods": "POST, OPTIONS",
       "access-control-allow-headers": "content-type",
       "cache-control": "no-store",
@@ -85,6 +93,7 @@ function json(data, status = 200) {
 
 export default {
   async fetch(request, env, ctx) {
+    setAllowOrigin(env);
     // CORS preflight
     if (request.method === "OPTIONS") return json({ ok: true });
 
@@ -114,7 +123,8 @@ export default {
     if (!env.ANTHROPIC_API_KEY) return json({ error: "server not configured", code: "no-key" }, 503);
 
     // 调 Claude
-    const sys = (locale === "en" ? SYSTEM_PROMPT_EN : SYSTEM_PROMPT_ZH).replace("{{QUOTE}}", quote);
+    // 用 replacement 函数避免 quote 含 $& / $$ / $` 等被当替换特殊串（破坏铁律2：只引原文）。
+    const sys = (locale === "en" ? SYSTEM_PROMPT_EN : SYSTEM_PROMPT_ZH).replace("{{QUOTE}}", () => quote);
     const userMsg = locale === "en"
       ? `The present me asks: ${question}\n\nAnswer as the past me who wrote that line.`
       : `现在的我问：${question}\n\n作为写下那句话的我，回答。`;
