@@ -269,6 +269,7 @@ const TSD = (() => {
       aiConsent: false,
       moments: SEED_MOMENTS.slice(),
       revisits: SEED_REVISITS.slice(),
+      recallInteractions: [], // 回访交互账本（skip/revisited），与 revisits 分离。skip 不写 revisit，只写这里。
       settings: {
         reducedMotion: false,
         darkMode: 'auto',
@@ -299,6 +300,7 @@ const TSD = (() => {
     // 数组字段：缺失补空数组（绝不覆盖为 undefined）
     merged.moments = Array.isArray(parsed.moments) ? parsed.moments : fresh.moments;
     merged.revisits = Array.isArray(parsed.revisits) ? parsed.revisits : fresh.revisits;
+    merged.recallInteractions = Array.isArray(parsed.recallInteractions) ? parsed.recallInteractions : [];
     merged.aiLog = Array.isArray(parsed.aiLog) ? parsed.aiLog : [];
     merged.achievements = (parsed.achievements && typeof parsed.achievements === 'object') ? parsed.achievements : {};
     merged.capsules = Array.isArray(parsed.capsules) ? parsed.capsules : [];
@@ -499,7 +501,7 @@ const TSD = (() => {
   function getRevisitCount(momentId) {
     return state.revisits.filter(r => r.momentId === momentId).length;
   }
-  function addRevisit(momentId, feeling, feelingTag) {
+  function addRevisit(momentId, feeling, feelingTag, opts) {
     const r = {
       id: 'r-' + Date.now(),
       momentId,
@@ -509,8 +511,37 @@ const TSD = (() => {
       source: 'user',
     };
     state.revisits.push(r);
+    // 同步写一条 recallInteraction（revisited）。mode 可选：remembered/neededCue（source 隐藏式回忆用）。
+    if (!state.recallInteractions) state.recallInteractions = [];
+    state.recallInteractions.push({
+      id: 'ri-' + Date.now(),
+      momentId,
+      at: r.at,
+      outcome: 'revisited',
+      mode: (opts && opts.mode) || null,
+      revisitId: r.id,
+    });
     save();
     return r;
+  }
+
+  // skipRecall：用户在回访卡片上"先跳过"。不写 revisit（不算一次回访），
+  // 只写 recallInteraction(outcome: skipped) → pickEcho 在 SKIP_COOLDOWN_DAYS（7天）内不再推该瞬间。
+  // 数据闭环：让"用户为什么跳过"可被分析，优化调度；尊重"现在不想看"而非强行重复推送。
+  function skipRecall(momentId) {
+    if (!momentId) return false;
+    if (!state.recallInteractions) state.recallInteractions = [];
+    const it = {
+      id: 'ri-' + Date.now(),
+      momentId,
+      at: Date.now(),
+      outcome: 'skipped',
+      mode: null,
+      revisitId: null,
+    };
+    state.recallInteractions.push(it);
+    save();
+    return it;
   }
 
   // 回访厚度 —— 0次=草地，1次=花苞，2+次=变厚
@@ -592,7 +623,14 @@ const TSD = (() => {
     }
     // 允许今天再推一个新瞬间（回访是"带回"不是"记录"），不因今天已回访而停止推 echo。
     // 反信息茧房：综合 久未回访 + 重要 + 随机 + 情境
-    const candidates = state.moments.filter(m => m.confirmed !== false);
+    // skip 冷却：用户明确跳过的瞬间 SKIP_COOLDOWN_DAYS 天内不再被推（数据闭环：尊重"现在不想看"）
+    const SKIP_COOLDOWN_MS = 7 * 86400000;
+    const skipCooldownMomentIds = new Set(
+      (state.recallInteractions || [])
+        .filter(i => i.outcome === 'skipped' && (Date.now() - i.at) < SKIP_COOLDOWN_MS)
+        .map(i => i.momentId)
+    );
+    const candidates = state.moments.filter(m => m.confirmed !== false && !skipCooldownMomentIds.has(m.id));
     if (!candidates.length) return null;
 
     // 开放回路（Zeigarnik）：昨天的未完引子今天近乎必然被带回（低频：全局至多 1 条）
@@ -1340,7 +1378,7 @@ const TSD = (() => {
     saveMediaBlob, getMediaBlob, deleteMediaBlob, resolveMediaUrl, dataUrlToBlob,
     restoreDeletedMoment, hasMomentTombstone, clearMomentTombstone,
     searchMoments,
-    getRevisits, getRevisitCount, addRevisit, thickness,
+    getRevisits, getRevisitCount, addRevisit, skipRecall, thickness,
     setThread, clearThread, activeThread,
     pickEcho, weekRevisits, weekRevisitStats, ninetyDayStats,
     setOnboarded, setBirthYear, setReviewContext, setNotifications,

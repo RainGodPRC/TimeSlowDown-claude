@@ -706,7 +706,8 @@ const App = (() => {
           el('button', { class: 'btn btn--ghost btn--sm btn--block', id: 'voice-btn', onclick: () => openVoiceCaptureSheet(id) }, [t('revisit.voice_btn')]),
         ]),
         el('div', { class: 'flex gap-3 mt-3' }, [
-          el('button', { class: 'btn btn--ghost btn--lg', style: 'flex:1', onclick: () => navigate('today') }, [t('revisit.stay_here')]),
+          // "就到这里"=未留下感受即离开 → 记一条 skip（pickEcho 7 天内不再推该瞬间，尊重"现在不想看"）。
+          el('button', { class: 'btn btn--ghost btn--lg', style: 'flex:1', onclick: () => { TSD.skipRecall(id); navigate('today'); } }, [t('revisit.stay_here')]),
           el('button', { class: 'btn btn--primary btn--lg', style: 'flex:1', id: 'save-feeling', disabled: true }, [t('revisit.keep_layer')]),
         ]),
       ]),
